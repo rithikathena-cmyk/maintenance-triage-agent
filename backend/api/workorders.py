@@ -11,7 +11,7 @@ from backend.schemas.schemas import (
     WorkOrderCreate,
     WorkOrderOut,
 )
-from backend.services import triage_service
+from backend.services import agent_service, triage_service
 from backend.services.safety_rules import urgency_rank
 
 router = APIRouter(tags=["work-orders"])
@@ -53,14 +53,19 @@ def list_work_orders(status: str | None = None, db: Session = Depends(get_db)):
 def run_triage(
     rescan: bool = False,
     limit: int | None = None,
+    agentic: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Run the Claude agent over pending work orders and store proposals.
+    """Triage pending work orders and store proposals.
 
-    Pass ``rescan=true`` to also re-triage orders already awaiting review
-    (never touches assigned or rejected orders). Pass ``limit`` to process at
-    most that many orders this call — the frontend chunks the run for progress.
+    - ``agentic=true``: Claude drives a real tool-use loop (it calls the
+      read_queue MCP tool itself and submits each triage via tools). It is given
+      only read/propose tools — never the write tool — so it can't assign work.
+    - ``rescan=true``: also re-triage orders already awaiting review (classic path).
+    - ``limit``: process at most that many orders this call (chunked progress).
     """
+    if agentic:
+        return agent_service.agentic_triage(db, limit=limit or 8)
     return triage_service.run_triage(db, rescan=rescan, limit=limit)
 
 

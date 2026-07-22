@@ -453,6 +453,14 @@ with st.sidebar:
     st.session_state.setdefault("approver", "dispatcher")
     approver = st.text_input("Dispatcher", key="approver", help="Recorded on every approval / rejection.")
 
+    agentic = st.toggle(
+        "Agentic mode — Claude drives the tools",
+        key="agentic_mode",
+        help="Claude calls the read_queue MCP tool itself and submits each triage via a "
+             "tool-use loop (multi-tool). It's never given the write tool — a human still "
+             "approves every assignment.",
+    )
+
     if st.button("🤖 Run triage on pending queue", width="stretch", type="primary"):
         pending = api_get("/stats")["pending_triage"]
         if pending == 0:
@@ -460,19 +468,20 @@ with st.sidebar:
         else:
             # Triage in small chunks so a live progress bar can advance; each
             # chunk commits per order on the backend, so progress persists.
-            prog = st.progress(0.0, text=f"Claude triaging 0 / {pending}…")
+            mode = "Agent (tool-use)" if agentic else "Claude"
+            prog = st.progress(0.0, text=f"{mode} triaging 0 / {pending}…")
             done = 0
             while True:
-                r = api_post("/triage", limit=8)
+                r = api_post("/triage", limit=8, agentic=agentic)
                 if r.get("busy"):
                     st.warning("A triage run is already in progress — please wait for it to finish.")
                     break
                 done += r["triaged"]
-                prog.progress(min(1.0, done / pending), text=f"Claude triaging {done} / {pending}…")
+                prog.progress(min(1.0, done / pending), text=f"{mode} triaging {done} / {pending}…")
                 if r["triaged"] == 0 or r.get("remaining", 0) == 0:
                     break
             prog.empty()
-            st.success(f"Triaged {done} order(s).")
+            st.success(f"Triaged {done} order(s){' via the agent loop' if agentic else ''}.")
         st.cache_data.clear()
         st.rerun()
 
@@ -626,7 +635,11 @@ def render_card(p):
             )
         with head[1]:
             src = p.get("source", "claude")
-            src_txt = "Claude agent" if src == "claude" else "keyword heuristic"
+            src_txt = {
+                "claude": "Claude (single call)",
+                "agent": "Claude agent (tool-use)",
+                "heuristic": "keyword heuristic",
+            }.get(src, src)
             conf_block = ""
             if conf_pct is not None:
                 conf_block = (
