@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "work-order-queue": {
+      "command": "python",
+      "args": ["mcp_servers/queue_server.py"],
+      "description": "Reads the incoming work-order queue (read_queue tool)."
+    },
+    "assignment-writer": {
+      "command": "python",
+      "args": ["mcp_servers/assignment_server.py"],
+      "description": "Writes crew assignments (write_assignment tool). Reached only via human approval."
+    }
+  }
+}
