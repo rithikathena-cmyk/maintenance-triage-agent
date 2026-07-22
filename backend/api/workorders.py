@@ -19,7 +19,12 @@ router = APIRouter(tags=["work-orders"])
 
 @router.post("/work-orders", response_model=WorkOrderOut, status_code=201)
 def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db)):
-    """Operator files a maintenance request into the queue."""
+    """Operator files a maintenance request into the queue.
+
+    Auto-triage: the order is immediately classified by Claude so it lands in
+    the dispatcher's queue already triaged. This is best-effort — if triage
+    fails the order stays ``pending`` and the filing still succeeds.
+    """
     work_order = models.WorkOrder(
         title=payload.title,
         description=payload.description,
@@ -29,6 +34,9 @@ def create_work_order(payload: WorkOrderCreate, db: Session = Depends(get_db)):
     )
     db.add(work_order)
     db.commit()
+    db.refresh(work_order)
+
+    triage_service.triage_work_order(db, work_order)
     db.refresh(work_order)
     return work_order
 
@@ -42,13 +50,18 @@ def list_work_orders(status: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("/triage", response_model=TriageSummary)
-def run_triage(rescan: bool = False, db: Session = Depends(get_db)):
+def run_triage(
+    rescan: bool = False,
+    limit: int | None = None,
+    db: Session = Depends(get_db),
+):
     """Run the Claude agent over pending work orders and store proposals.
 
     Pass ``rescan=true`` to also re-triage orders already awaiting review
-    (never touches assigned or rejected orders).
+    (never touches assigned or rejected orders). Pass ``limit`` to process at
+    most that many orders this call — the frontend chunks the run for progress.
     """
-    return triage_service.run_triage(db, rescan=rescan)
+    return triage_service.run_triage(db, rescan=rescan, limit=limit)
 
 
 @router.get("/stats", response_model=QueueStats)

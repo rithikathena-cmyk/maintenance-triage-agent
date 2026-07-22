@@ -107,7 +107,9 @@ def propose_triage(title: str, description: str, location: str | None = None) ->
     try:
         response = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            # Adaptive thinking shares this budget with the output, so keep it
+            # generous — too low and a long think truncates the JSON mid-object.
+            max_tokens=4096,
             thinking={"type": "adaptive"},
             output_config={
                 "effort": "medium",
@@ -123,9 +125,20 @@ def propose_triage(title: str, description: str, location: str | None = None) ->
 
     text = next((b.text for b in response.content if b.type == "text"), None)
     if not text:
-        return _heuristic(title, description)
+        # e.g. adaptive thinking consumed the whole budget before any output text.
+        result = _heuristic(title, description)
+        result["reasoning"] = "Claude returned no structured output; used heuristic."
+        return result
 
-    data = json.loads(text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        # Truncated / malformed structured output (e.g. hit max_tokens mid-JSON).
+        # A single bad response must never fail the whole triage batch.
+        result = _heuristic(title, description)
+        result["reasoning"] = "Claude output was not valid JSON; used heuristic."
+        return result
+
     # Clamp confidence into [0, 1] defensively (the range is prompt-enforced, not
     # schema-enforced, since the API rejects min/max on number types).
     if isinstance(data.get("confidence"), (int, float)):

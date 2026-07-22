@@ -102,6 +102,12 @@ def approve(
     if not result.get("ok"):
         raise AssignmentError(result.get("error", "write_assignment failed"))
 
-    # Reflect the committed state locally (the MCP server updated the DB rows).
-    db.expire_all()
-    return db.get(models.Assignment, result["assignment_id"])
+    # The MCP server committed the assignment on its OWN connection. End this
+    # session's current transaction (rollback — we've only read so far) so the
+    # follow-up read starts a fresh snapshot that can see it. Without this,
+    # MySQL's default REPEATABLE READ isolation hides the just-committed row.
+    db.rollback()
+    assignment = db.get(models.Assignment, result["assignment_id"])
+    if assignment is None:  # extremely defensive — the write reported ok
+        raise AssignmentError("assignment written but could not be read back")
+    return assignment

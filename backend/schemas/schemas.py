@@ -46,8 +46,10 @@ class ProposalOut(BaseModel):
 
 
 class TriageSummary(BaseModel):
-    triaged: int
-    queue_size: int
+    triaged: int          # orders triaged in this call
+    queue_size: int       # orders this call attempted
+    remaining: int = 0    # pending orders still awaiting triage after this call
+    busy: bool = False    # True if another triage run held the lock (no work done)
 
 
 class QueueStats(BaseModel):
