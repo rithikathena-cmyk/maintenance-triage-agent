@@ -15,29 +15,25 @@ Layout:
 import os
 from datetime import datetime, timezone
 
-import requests
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # local .env (no-op on Streamlit Community Cloud)
 
+# Single-process deploy: the backend runs IN this Streamlit process (no separate
+# server). Bridge Streamlit secrets into os.environ BEFORE importing the backend,
+# because the DB engine reads DATABASE_URL at import time.
+try:
+    for _k in ("DATABASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "SEED_ON_START"):
+        if not os.getenv(_k) and _k in st.secrets:
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:
+    pass  # no secrets.toml locally — env / .env is used instead
 
-def _resolve_backend_url():
-    """Where the FastAPI backend lives.
+from backend import local_client as api  # noqa: E402  (must follow the env bridge)
 
-    Priority: BACKEND_URL env var (local dev) → Streamlit secret (Community
-    Cloud, where the value points at the Render backend) → localhost fallback.
-    """
-    env = os.getenv("BACKEND_URL")
-    if env:
-        return env.rstrip("/")
-    try:
-        return str(st.secrets["BACKEND_URL"]).rstrip("/")
-    except Exception:
-        return "http://localhost:8000"
-
-
-BACKEND_URL = _resolve_backend_url()
+_DB_URL = os.getenv("DATABASE_URL", "")
+DB_HOST = _DB_URL.split("@")[-1].split("/")[0] if "@" in _DB_URL else "local database"
 
 st.set_page_config(
     page_title="Maintenance Triage Console",
@@ -68,20 +64,18 @@ def u(urgency):
 # API helpers
 # --------------------------------------------------------------------------- #
 def api_get(path, **params):
-    r = requests.get(f"{BACKEND_URL}{path}", params=params, timeout=120)
-    r.raise_for_status()
-    return r.json()
+    """Call the in-process backend (no network hop)."""
+    return api.get(path, **params)
 
 
 def api_post(path, json=None, **params):
-    r = requests.post(f"{BACKEND_URL}{path}", json=json, params=params, timeout=600)
-    r.raise_for_status()
-    return r.json()
+    return api.post(path, json=json, **params)
 
 
 def backend_online():
+    """The backend is in-process; this really checks the database is reachable."""
     try:
-        api_get("/health")
+        api.get("/stats")
         return True
     except Exception:
         return False
@@ -339,15 +333,15 @@ if not online:
         <div class="appbar">
           <div><div class="title">🔧 Maintenance Work Order Triage</div>
           <div class="subtitle">Dispatcher console</div></div>
-          <div class="pillrow"><span class="pill off"><span class="dot">●</span>Backend offline</span></div>
+          <div class="pillrow"><span class="pill off"><span class="dot">●</span>Database offline</span></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
     st.error(
-        f"Cannot reach the backend at **{BACKEND_URL}**.\n\n"
-        "Start it from the project root:\n\n"
-        "```bash\nuvicorn backend.main:app --reload\n```"
+        f"Cannot reach the database at **{DB_HOST}**.\n\n"
+        "Check that `DATABASE_URL` is set (locally in `.env`, or in Streamlit "
+        "secrets on the cloud) and that the database is reachable."
     )
     st.stop()
 
@@ -378,7 +372,7 @@ comps = (health or {}).get("components", {})
 # Backend is reachable (the connectivity gate already passed), so mark it up.
 comps.setdefault("backend", {"status": "up", "detail": "FastAPI"})
 
-ENV_LABEL = "Local" if any(h in BACKEND_URL for h in ("localhost", "127.0.0.1")) else "Remote"
+ENV_LABEL = "Local" if any(h in _DB_URL for h in ("localhost", "127.0.0.1")) else "Cloud"
 _LOGO_SVG = (
     '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" '
     'stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">'
@@ -792,7 +786,7 @@ st.markdown(
     f"""
     <div class="statusbar">
       <div class="grp"><span class="sdot" style="background:{_dot_color}"></span>
-        <b>{_status_txt}</b> · backend {BACKEND_URL}</div>
+        <b>{_status_txt}</b> · in-process backend · {DB_HOST}</div>
       <div class="grp">
         Human-in-the-loop dispatch · no assignment without approval
         &nbsp;·&nbsp; Maintenance Triage Console <b>v1.0</b>
