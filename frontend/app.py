@@ -13,7 +13,15 @@ Layout:
   Sidebar ......... run triage · file order · safety rules · crews · activity
 """
 import os
+import sys
 from datetime import datetime, timezone
+
+# Streamlit runs this file with only its own folder (frontend/) on sys.path, so
+# the sibling `backend` package isn't importable by default. Put the repo root
+# on the path first, before any `from backend import ...`.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import streamlit as st
 from dotenv import load_dotenv
