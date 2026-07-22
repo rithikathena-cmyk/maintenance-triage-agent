@@ -50,14 +50,14 @@ st.set_page_config(
 # Design tokens
 # --------------------------------------------------------------------------- #
 URGENCY = {
-    "safety-critical": {"label": "Safety Critical", "color": "#f87171", "dot": "🔴", "rank": 0},
-    "production-stopping": {"label": "Production Stopping", "color": "#fbbf24", "dot": "🟠", "rank": 1},
-    "routine": {"label": "Routine", "color": "#4ade80", "dot": "🟢", "rank": 2},
+    "safety-critical": {"label": "Safety Critical", "color": "#f85149", "dot": "🔴", "rank": 0},
+    "production-stopping": {"label": "Production Stopping", "color": "#d29922", "dot": "🟠", "rank": 1},
+    "routine": {"label": "Routine", "color": "#3fb950", "dot": "🟢", "rank": 2},
 }
-DEFAULT_URGENCY = {"label": "Unclassified", "color": "#7c8895", "dot": "⚪", "rank": 3}
+DEFAULT_URGENCY = {"label": "Unclassified", "color": "#7d8894", "dot": "⚪", "rank": 3}
 
-# Brand — Teal / Graphite enterprise palette
-BRAND = "#2dd4bf"
+# Brand — refined premium dark (muted indigo, GitHub/Linear aesthetic)
+BRAND = "#6b7cff"
 
 
 def u(urgency):
@@ -140,21 +140,19 @@ st.markdown(
     """
     <style>
       :root {
-        --bg:#0b0f12; --surface:#141a1f; --surface-2:#1b232a; --surface-3:#212b33;
-        --border:#26313a; --border-soft:#1e262d;
-        --text:#e6edf2; --text-2:#93a1ac; --text-3:#64727d;
-        --brand:#2dd4bf; --brand-dim:#14b8a6; --brand-soft:rgba(45,212,191,.12);
-        --safety:#f87171; --safety-soft:rgba(248,113,113,.12); --safety-bd:rgba(248,113,113,.38);
-        --amber:#fbbf24; --amber-soft:rgba(251,191,36,.12);
-        --green:#4ade80;
-        --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+        --bg:#0d1117; --surface:#161b22; --surface-2:#1c2129; --surface-3:#232a33;
+        --border:#232a33; --border-soft:#1c2129;
+        --text:#e6edf3; --text-2:#aeb9c4; --text-3:#7d8894;
+        --brand:#6b7cff; --brand-dim:#5563e8; --brand-soft:rgba(107,124,255,.13);
+        --safety:#f85149; --safety-soft:rgba(248,81,73,.13); --safety-bd:rgba(248,81,73,.40);
+        --amber:#d29922; --amber-soft:rgba(210,153,34,.14);
+        --green:#3fb950;
+        --shadow:0 1px 2px rgba(1,4,9,.55);
         --font:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
       }
-      html, body, [class*="css"] { font-family:var(--font); }
-      .stApp { background:
-          radial-gradient(1200px 500px at 85% -8%, rgba(45,212,191,.06), transparent 60%),
-          var(--bg); }
-      .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1420px; }
+      html, body, [class*="css"] { font-family:var(--font); letter-spacing:-.006em; }
+      .stApp { background:var(--bg); }
+      .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1400px; }
       #MainMenu, footer { visibility: hidden; }
       /* Keep the header transparent but functional — it holds the sidebar toggle,
          so hiding it entirely would strand a collapsed sidebar with no way back. */
@@ -167,55 +165,51 @@ st.markdown(
       /* ---- Top app bar ---- */
       .appbar {
         display:flex; align-items:center; justify-content:space-between; gap:1rem;
-        padding:1.05rem 1.4rem; margin-bottom:1.3rem; border-radius:16px;
-        background:linear-gradient(115deg, rgba(45,212,191,.14) 0%, rgba(20,26,31,.4) 42%), var(--surface);
-        border:1px solid var(--border); box-shadow:var(--shadow); position:relative; overflow:hidden;
+        padding:1.05rem 1.4rem; margin-bottom:1.4rem; border-radius:12px;
+        background:var(--surface);
+        border:1px solid var(--border); box-shadow:var(--shadow); position:relative;
       }
-      .appbar::after {
-        content:""; position:absolute; left:0; right:0; bottom:0; height:2px;
-        background:linear-gradient(90deg, var(--brand), transparent 70%);
-      }
-      .appbar .title { font-size:1.42rem; font-weight:760; letter-spacing:-.015em; color:#f4f8fb;
+      .appbar .title { font-size:1.5rem; font-weight:680; letter-spacing:-.025em; color:#f6f9fc;
         display:flex; align-items:center; gap:.5rem; }
-      .appbar .subtitle { font-size:.83rem; color:var(--text-2); margin-top:3px; }
+      .appbar .subtitle { font-size:.83rem; color:var(--text-2); margin-top:3px; letter-spacing:0; }
       .pillrow { display:flex; gap:.45rem; flex-wrap:wrap; justify-content:flex-end; }
       .pill {
-        font-size:.71rem; font-weight:600; padding:.3rem .65rem; border-radius:999px;
-        border:1px solid var(--border); color:var(--text-2); background:rgba(11,15,18,.6);
-        white-space:nowrap; display:inline-flex; align-items:center; gap:.35rem;
+        font-size:.71rem; font-weight:550; padding:.3rem .65rem; border-radius:6px;
+        border:1px solid var(--border); color:var(--text-2); background:var(--surface-2);
+        white-space:nowrap; display:inline-flex; align-items:center; gap:.4rem;
       }
-      .pill.on   { border-color:rgba(45,212,191,.4); color:var(--brand); background:var(--brand-soft); }
-      .pill.warn { border-color:rgba(251,191,36,.4); color:var(--amber); background:var(--amber-soft); }
+      .pill.on   { border-color:var(--border); color:var(--text-2); background:var(--surface-2); }
+      .pill.on .dot   { color:var(--green); }
+      .pill.warn .dot { color:var(--amber); }
       .pill.off  { border-color:var(--safety-bd); color:var(--safety); background:var(--safety-soft); }
-      .pill .dot { font-size:.6rem; line-height:1; }
-      .pill.warn .dot, .pill.off .dot { animation:pulse 1.6s ease-in-out infinite; }
-      @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+      .pill.off .dot  { color:var(--safety); }
+      .pill .dot { font-size:.58rem; line-height:1; }
 
       /* ---- KPI tiles ---- */
       .kpi {
-        border:1px solid var(--border); border-radius:15px; padding:1.05rem 1.15rem; background:var(--surface);
-        position:relative; overflow:hidden; height:100%; box-shadow:var(--shadow);
-        transition:transform .14s ease, border-color .14s ease;
+        border:1px solid var(--border); border-radius:10px; padding:1.05rem 1.15rem; background:var(--surface);
+        position:relative; overflow:hidden; height:100%;
+        transition:border-color .14s ease;
       }
-      .kpi:hover { transform:translateY(-2px); border-color:var(--surface-3); }
+      .kpi:hover { border-color:var(--surface-3); }
       .kpi::before {
         content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
-        background:var(--accent,var(--brand)); box-shadow:0 0 14px 0 var(--accent,var(--brand));
+        background:var(--accent,var(--brand));
       }
-      .kpi .label { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2); font-weight:650; }
-      .kpi .value { font-size:2.15rem; font-weight:780; color:#f4f8fb; line-height:1.1; margin-top:.3rem;
-        font-variant-numeric:tabular-nums; }
-      .kpi .foot  { font-size:.73rem; color:var(--text-3); margin-top:.2rem; }
+      .kpi .label { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-2); font-weight:600; }
+      .kpi .value { font-size:2.2rem; font-weight:680; color:#f6f9fc; line-height:1.1; margin-top:.35rem;
+        letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
+      .kpi .foot  { font-size:.73rem; color:var(--text-3); margin-top:.25rem; }
 
       /* ---- Work order card ---- */
       .wocard {
-        border:1px solid var(--border); border-left:4px solid var(--accent,var(--brand));
-        border-radius:14px; padding:1.1rem 1.25rem .45rem; background:var(--surface);
-        margin-bottom:.25rem; box-shadow:var(--shadow); transition:border-color .14s ease;
+        border:1px solid var(--border); border-left:3px solid var(--accent,var(--brand));
+        border-radius:10px; padding:1.1rem 1.25rem .45rem; background:var(--surface);
+        margin-bottom:.25rem; transition:border-color .14s ease;
       }
       .wocard:hover { border-color:var(--surface-3); border-left-color:var(--accent,var(--brand)); }
-      .wocard .id     { font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--brand); font-size:.76rem; font-weight:650; letter-spacing:.02em; }
-      .wocard .ttl    { font-size:1.1rem; font-weight:720; color:#f4f8fb; margin:.15rem 0 .4rem; letter-spacing:-.01em; }
+      .wocard .id     { font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--text-3); font-size:.76rem; font-weight:600; letter-spacing:.02em; }
+      .wocard .ttl    { font-size:1.14rem; font-weight:640; color:#f6f9fc; margin:.15rem 0 .4rem; letter-spacing:-.02em; }
       .wocard .meta   { font-size:.79rem; color:var(--text-2); margin-bottom:.6rem; }
       .wocard .meta b { color:var(--text); font-weight:600; }
       .wocard .desc   { font-size:.9rem; color:#cbd5dd; line-height:1.55; }
@@ -243,11 +237,11 @@ st.markdown(
       .conftrack { height:7px; background:var(--surface-2); border-radius:999px; overflow:hidden; margin-top:.25rem; }
       .conffill  { height:100%; border-radius:999px; }
 
-      .kv { font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:650; }
-      .kvval { font-size:.92rem; color:var(--text); font-weight:650; }
+      .kv { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-2); font-weight:650; }
+      .kvval { font-size:.93rem; color:var(--text); font-weight:650; }
 
       /* sidebar */
-      section[data-testid="stSidebar"] { background:#0e141a; border-right:1px solid var(--border-soft); }
+      section[data-testid="stSidebar"] { background:#0f131a; border-right:1px solid var(--border); }
       .sb-h { font-size:.73rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text-2); font-weight:750; margin:.2rem 0 .45rem; }
       .sb-item { font-size:.83rem; color:#c1ccd4; padding:.14rem 0; }
       .sb-tag  { font-size:.68rem; padding:.1rem .42rem; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-2); }
@@ -259,44 +253,51 @@ st.markdown(
       }
       .stButton>button:hover { border-color:var(--brand); color:var(--brand); }
       .stButton>button[kind="primary"] {
-        background:var(--brand); color:#06201d; border-color:var(--brand); font-weight:700;
+        background:var(--brand); color:#ffffff; border-color:var(--brand); font-weight:600;
       }
-      .stButton>button[kind="primary"]:hover { background:#5fe3d1; border-color:#5fe3d1; color:#06201d; }
+      .stButton>button[kind="primary"]:hover { background:var(--brand-dim); border-color:var(--brand-dim); color:#ffffff; }
       [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea,
       [data-baseweb="select"] > div {
         border-radius:9px !important;
       }
       .stTabs [data-baseweb="tab-list"] { gap:.35rem; }
-      .stTabs [data-baseweb="tab"] { font-weight:600; }
+      .stTabs [data-baseweb="tab"] { font-weight:600; color:var(--text-2); }
       .stTabs [aria-selected="true"] { color:var(--brand) !important; }
       .stTabs [data-baseweb="tab-highlight"] { background:var(--brand) !important; }
+
+      /* Readability safety net for Streamlit-native text on the dark canvas */
+      .stApp, [data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p,
+      .stSelectbox label, .stTextInput label, .stTextArea label, .stMultiSelect label,
+      [data-testid="stWidgetLabel"] p { color:var(--text) !important; }
+      [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color:var(--text-2) !important; }
+      .stTextInput input, .stTextArea textarea, [data-baseweb="select"] div { color:var(--text) !important; }
+      .stTextInput input::placeholder, .stTextArea textarea::placeholder { color:var(--text-3) !important; }
 
       /* ---- Brand mark + app-bar meta ---- */
       .brandwrap { display:flex; align-items:center; gap:.9rem; }
       .brandmark {
-        width:44px; height:44px; border-radius:12px; display:grid; place-items:center; flex:none;
-        background:linear-gradient(140deg, var(--brand), var(--brand-dim));
-        box-shadow:0 6px 16px -6px rgba(45,212,191,.6); color:#06201d;
+        width:42px; height:42px; border-radius:10px; display:grid; place-items:center; flex:none;
+        background:linear-gradient(140deg, var(--brand), var(--brand-dim)); color:#ffffff;
       }
       .appbar-meta { display:flex; flex-direction:column; align-items:flex-end; gap:.5rem; }
-      .metaline { font-size:.71rem; color:var(--text-3); display:flex; gap:1rem; align-items:center; }
-      .metaline b { color:var(--text-2); font-weight:600; font-variant-numeric:tabular-nums; }
+      .metaline { font-size:.73rem; color:var(--text-2); display:flex; gap:1rem; align-items:center; }
+      .metaline b { color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
       .envbadge {
-        font-size:.64rem; font-weight:750; letter-spacing:.09em; padding:.22rem .55rem; border-radius:6px;
-        background:var(--brand-soft); color:var(--brand); border:1px solid rgba(45,212,191,.4); text-transform:uppercase;
+        font-size:.64rem; font-weight:700; letter-spacing:.09em; padding:.22rem .55rem; border-radius:5px;
+        background:var(--surface-2); color:var(--text-2); border:1px solid var(--border); text-transform:uppercase;
       }
 
       /* ---- Section eyebrow ---- */
       .eyebrow {
-        font-size:.72rem; font-weight:750; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3);
+        font-size:.76rem; font-weight:750; letter-spacing:.13em; text-transform:uppercase; color:var(--text-2);
         display:flex; align-items:center; gap:.7rem; margin:.4rem 0 .75rem;
       }
       .eyebrow::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
 
       /* ---- Queue composition strip ---- */
       .dist {
-        background:var(--surface); border:1px solid var(--border); border-radius:13px;
-        padding:.9rem 1.05rem; box-shadow:var(--shadow); margin-bottom:1rem;
+        background:var(--surface); border:1px solid var(--border); border-radius:10px;
+        padding:.9rem 1.05rem; margin-bottom:1rem;
       }
       .dist-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.6rem; }
       .dist-title { font-size:.82rem; font-weight:700; color:var(--text); }
@@ -309,7 +310,7 @@ st.markdown(
       .dist-item b { color:var(--text); font-weight:700; font-variant-numeric:tabular-nums; }
 
       /* ---- Card action zone ---- */
-      .actzone-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--text-3);
+      .actzone-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; color:var(--text-2);
         font-weight:650; margin:.35rem 0 -.1rem; }
 
       /* ---- Status footer ---- */
@@ -320,8 +321,8 @@ st.markdown(
       }
       .statusbar .grp { display:flex; align-items:center; gap:.5rem; }
       .statusbar b { color:var(--text-2); font-weight:600; }
-      .statusbar .sdot { width:7px; height:7px; border-radius:999px; background:var(--brand);
-        box-shadow:0 0 8px var(--brand); display:inline-block; }
+      .statusbar .sdot { width:7px; height:7px; border-radius:999px; background:var(--green);
+        display:inline-block; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -448,12 +449,30 @@ st.write("")
 # --------------------------------------------------------------------------- #
 with st.sidebar:
     st.markdown("### 🛠️ Triage Console")
-    approver = st.text_input("Dispatcher", value="dispatcher", help="Recorded on every approval / rejection.")
+    # Remember the dispatcher name across reruns (persists in session state).
+    st.session_state.setdefault("approver", "dispatcher")
+    approver = st.text_input("Dispatcher", key="approver", help="Recorded on every approval / rejection.")
 
     if st.button("🤖 Run triage on pending queue", width="stretch", type="primary"):
-        with st.spinner("Claude is triaging the pending queue…"):
-            summary = api_post("/triage")
-        st.success(f"Triaged {summary['triaged']} of {summary['queue_size']}.")
+        pending = api_get("/stats")["pending_triage"]
+        if pending == 0:
+            st.info("No pending orders — nothing to triage.")
+        else:
+            # Triage in small chunks so a live progress bar can advance; each
+            # chunk commits per order on the backend, so progress persists.
+            prog = st.progress(0.0, text=f"Claude triaging 0 / {pending}…")
+            done = 0
+            while True:
+                r = api_post("/triage", limit=8)
+                if r.get("busy"):
+                    st.warning("A triage run is already in progress — please wait for it to finish.")
+                    break
+                done += r["triaged"]
+                prog.progress(min(1.0, done / pending), text=f"Claude triaging {done} / {pending}…")
+                if r["triaged"] == 0 or r.get("remaining", 0) == 0:
+                    break
+            prog.empty()
+            st.success(f"Triaged {done} order(s).")
         st.cache_data.clear()
         st.rerun()
 
@@ -464,11 +483,16 @@ with st.sidebar:
             loc = st.text_input("Machine / location")
             rep = st.text_input("Reported by")
             if st.form_submit_button("File work order", width="stretch") and t and d:
-                api_post("/work-orders", json={
-                    "title": t, "description": d,
-                    "location": loc or None, "reported_by": rep or None,
-                })
-                st.success("Filed. Run triage to get a proposal.")
+                with st.spinner("Filing and auto-triaging with Claude…"):
+                    wo = api_post("/work-orders", json={
+                        "title": t, "description": d,
+                        "location": loc or None, "reported_by": rep or None,
+                    })
+                if wo.get("status") == "triaged":
+                    st.success("Filed and triaged — it's now in the queue.")
+                else:
+                    st.warning("Filed, but auto-triage didn't complete. Use Run triage to classify it.")
+                st.cache_data.clear()
                 st.rerun()
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -743,7 +767,7 @@ with history_tab:
 # --------------------------------------------------------------------------- #
 _overall = (health or {}).get("status")
 if _overall == "ok":
-    _status_txt, _dot_color = "All systems operational", "var(--brand)"
+    _status_txt, _dot_color = "All systems operational", "var(--green)"
 elif _overall == "degraded":
     _down = [k.replace("_", " ") for k, c in comps.items() if c.get("status") in ("down", "degraded")]
     _status_txt = "Degraded — " + (", ".join(_down) if _down else "check components")
@@ -754,7 +778,7 @@ else:
 st.markdown(
     f"""
     <div class="statusbar">
-      <div class="grp"><span class="sdot" style="background:{_dot_color};box-shadow:0 0 8px {_dot_color}"></span>
+      <div class="grp"><span class="sdot" style="background:{_dot_color}"></span>
         <b>{_status_txt}</b> · backend {BACKEND_URL}</div>
       <div class="grp">
         Human-in-the-loop dispatch · no assignment without approval
