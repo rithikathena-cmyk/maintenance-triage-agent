@@ -32,11 +32,14 @@ load_dotenv()  # local .env (no-op on Streamlit Community Cloud)
 # server). Bridge Streamlit secrets into os.environ BEFORE importing the backend,
 # because the DB engine reads DATABASE_URL at import time.
 try:
-    for _k in ("DATABASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "SEED_ON_START"):
-        if not os.getenv(_k) and _k in st.secrets:
-            os.environ[_k] = str(st.secrets[_k])
+    _secrets = dict(st.secrets)  # flatten top-level secrets to a plain dict
 except Exception:
-    pass  # no secrets.toml locally — env / .env is used instead
+    _secrets = {}  # no secrets configured (e.g. local dev uses .env instead)
+for _k in ("DATABASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_MODEL", "SEED_ON_START"):
+    if not os.getenv(_k) and _k in _secrets:
+        os.environ[_k] = str(_secrets[_k])
+
+SECRET_HAS_DB = "DATABASE_URL" in _secrets  # for the diagnostic gate below
 
 from backend import local_client as api  # noqa: E402  (must follow the env bridge)
 
@@ -346,11 +349,25 @@ if not online:
         """,
         unsafe_allow_html=True,
     )
-    st.error(
-        f"Cannot reach the database at **{DB_HOST}**.\n\n"
-        "Check that `DATABASE_URL` is set (locally in `.env`, or in Streamlit "
-        "secrets on the cloud) and that the database is reachable."
-    )
+    st.error(f"Cannot reach the database at **{DB_HOST}**.")
+    have_env = bool(os.getenv("DATABASE_URL"))
+    if not have_env and not SECRET_HAS_DB:
+        st.info(
+            "**No `DATABASE_URL` found.** On Streamlit Cloud: open **Manage app → "
+            "⋮ → Settings → Secrets**, paste your `DATABASE_URL` and "
+            "`ANTHROPIC_API_KEY` (see `.streamlit/secrets.toml.example`), click "
+            "**Save**, then **Reboot** the app."
+        )
+    elif SECRET_HAS_DB and not have_env:
+        st.warning(
+            "`DATABASE_URL` is in Secrets but wasn't loaded into this session — "
+            "**Reboot** the app (Manage app → ⋮ → Reboot) so it starts fresh with the secret."
+        )
+    else:
+        st.warning(
+            "`DATABASE_URL` is set but the database isn't reachable. Double-check the "
+            "host, port (`4000` for TiDB), user, and password, and that the database exists."
+        )
     st.stop()
 
 meta = get_meta()
