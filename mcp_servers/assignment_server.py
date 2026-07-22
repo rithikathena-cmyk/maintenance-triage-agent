@@ -19,17 +19,20 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg2://postgres:postgres@localhost:5432/maintenance_triage",
+    "mysql+pymysql://root:root@localhost:3306/maintenance_triage",
 )
 
 
 def _connect_args(url: str) -> dict:
-    """TiDB Cloud / hosted MySQL require TLS; verify against the certifi bundle."""
-    if url.startswith("mysql"):
-        import certifi
+    """Remote MySQL (TiDB Cloud) needs TLS verified via certifi; local MySQL
+    ships a self-signed cert, so connect without verification there."""
+    if not url.startswith("mysql"):
+        return {}
+    if "localhost" in url or "127.0.0.1" in url:
+        return {}
+    import certifi
 
-        return {"ssl": {"ca": certifi.where()}}
-    return {}
+    return {"ssl": {"ca": certifi.where()}}
 
 
 _engine = create_engine(

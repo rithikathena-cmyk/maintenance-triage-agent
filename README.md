@@ -68,13 +68,14 @@ ever committed or shared, rotate it in the Anthropic console.
    pip install -r requirements.txt
    ```
 
-2. **Configure `.env`** — set your Postgres password in `DATABASE_URL`.
+2. **Configure `.env`** — set your MySQL credentials in `DATABASE_URL`
+   (`mysql+pymysql://root:PASSWORD@localhost:3306/maintenance_triage`).
    Optionally set `ANTHROPIC_API_KEY` (without it, triage falls back to a
    transparent keyword heuristic so the app still runs end-to-end).
 
 3. **Create the database** (one time)
    ```bash
-   psql -U postgres -c "CREATE DATABASE maintenance_triage;"
+   mysql -u root -p -e "CREATE DATABASE maintenance_triage;"
    ```
 
 4. **Create tables + seed sample data**

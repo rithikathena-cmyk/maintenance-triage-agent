@@ -1,10 +1,10 @@
 fastapi>=0.128
 uvicorn[standard]>=0.30
 sqlalchemy>=2.0
-psycopg2-binary>=2.9    # Postgres driver (local dev)
-pymysql>=1.1           # MySQL/TiDB Cloud driver (deployment)
-cryptography>=42.0     # required by pymysql for TiDB's caching_sha2 auth
+pymysql>=1.1           # MySQL / TiDB Cloud driver (primary)
+cryptography>=42.0     # required by pymysql for MySQL 8 / TiDB caching_sha2 auth
 certifi>=2024.2        # CA bundle for the TiDB Cloud TLS connection
+# psycopg2-binary>=2.9 # optional — uncomment only if you point at a Postgres URL
 pydantic>=2.7
 python-dotenv>=1.0
 anthropic>=0.69
