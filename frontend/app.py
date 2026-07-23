@@ -547,11 +547,15 @@ with st.sidebar:
                  help="Insert the next set of sample work orders and add them to the queue for review."):
         _idx = st.session_state["batch_index"]
         _res = api.add_sample_batch(_idx)
-        st.session_state["batch_index"] = _idx + 1
         if _res["added"]:
-            st.toast(f"Added {_res['added']} new orders (batch {_res['batch_no']} of {_res['total_batches']}).")
+            st.session_state["batch_index"] = _idx + 1
+            st.toast(f"Loaded {_res['added']} orders — set {_res['batch_no']} of {_res['total_batches']}.")
+        elif _res.get("exhausted"):
+            st.session_state["batch_index"] = 0  # cycle back to the start
+            st.toast("All sample sets loaded. Press again to start over from set 1.")
         else:
-            st.toast(f"Batch {_res['batch_no']} already loaded — no new orders to add.")
+            st.session_state["batch_index"] = _idx + 1
+            st.toast("That set is already in the queue — advancing to the next.")
         st.cache_data.clear()
         st.rerun()
 

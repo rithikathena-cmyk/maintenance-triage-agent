@@ -11,7 +11,6 @@ bridges Streamlit secrets into os.environ before importing this module).
 """
 import os
 import re
-from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
@@ -35,34 +34,13 @@ _initialized = False
 
 
 def ensure_init():
-    """Create tables (and optionally seed) once per process."""
+    """Create tables once per process. No auto-seed — the queue is populated
+    manually via the sidebar "Generate next batch of orders" button."""
     global _initialized
     if _initialized:
         return
     init_db()
-    # Seed sample orders when asked (SEED_ON_START), or automatically when the
-    # database is empty — a fresh SQLite file is useless without seed data. The
-    # seed() call is itself a no-op if the table already has rows.
-    _seed_flag = os.getenv("SEED_ON_START", "").lower() in ("1", "true", "yes")
-    if _seed_flag or _db_is_empty():
-        try:
-            from backend.database.seed import seed
-
-            seed()
-        except Exception:
-            pass
     _initialized = True
-
-
-def _db_is_empty() -> bool:
-    """True when there are no work orders yet (fresh database)."""
-    db = SessionLocal()
-    try:
-        return db.query(models.WorkOrder).count() == 0
-    except Exception:
-        return False
-    finally:
-        db.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -219,51 +197,49 @@ def _triage(limit=None, agentic=False, rescan=False) -> dict:
         db.close()
 
 
-# Sample-data batches for the manual "Generate next batch" button.
-_SAMPLE_BATCHES = None
-
-
-def _sample_batches():
-    global _SAMPLE_BATCHES
-    if _SAMPLE_BATCHES is None:
-        from backend.database.seed import SAMPLE_ORDERS
-        from backend.database.seed_extra import EXTRA_ORDERS
-        from backend.database.seed_more import MORE_ORDERS
-
-        _SAMPLE_BATCHES = [SAMPLE_ORDERS, EXTRA_ORDERS, MORE_ORDERS]
-    return _SAMPLE_BATCHES
-
-
 def add_sample_batch(index: int) -> dict:
-    """Insert sample batch #index (cycles through the sets), skipping any titles
-    already present, then triage pending orders into proposals so they surface as
-    reviewable cards. Does NOT assign — the dispatcher approves/rejects manually.
+    """Reveal the next set (page) of the 50-order sample pool.
+
+    Inserts the ``index``-th chunk of ``BATCH_SIZE`` orders (skipping any titles
+    already present), then triages ONLY those new orders directly — no MCP
+    round-trip, so it always produces reviewable cards even on Streamlit Cloud.
+    Never assigns; the dispatcher approves/rejects each card manually.
     """
+    from backend.database.sample_orders import BATCH_SIZE, SAMPLE_ORDERS
+
     ensure_init()
-    batches = _sample_batches()
-    n = len(batches)
-    batch = batches[index % n]
+    total_sets = (len(SAMPLE_ORDERS) + BATCH_SIZE - 1) // BATCH_SIZE
+    start = index * BATCH_SIZE
+    chunk = SAMPLE_ORDERS[start:start + BATCH_SIZE]
+
     db = SessionLocal()
     try:
         existing = {t for (t,) in db.query(models.WorkOrder.title).all()}
-        now = datetime.utcnow()
-        added = 0
-        for order in batch:
+        new_ids = []
+        for order in chunk:
             if order["title"] in existing:
                 continue
-            # Some sample sets carry an ``age_hours`` hint to backdate created_at;
-            # it isn't a column, so pull it out before constructing the row.
-            data = {k: v for k, v in order.items() if k != "age_hours"}
-            extra = {}
-            if "age_hours" in order:
-                extra["created_at"] = now - timedelta(hours=order["age_hours"])
-            db.add(models.WorkOrder(status=models.STATUS_PENDING, **data, **extra))
-            added += 1
+            wo = models.WorkOrder(status=models.STATUS_PENDING, **order)
+            db.add(wo)
+            db.flush()  # assign wo.id without ending the transaction
+            new_ids.append(wo.id)
         db.commit()
+
+        # Triage each new order in place (propose urgency/crew → a reviewable
+        # proposal). This is the deterministic path; it never assigns.
+        for wid in new_ids:
+            wo = db.get(models.WorkOrder, wid)
+            if wo is not None:
+                triage_service.triage_work_order(db, wo)
     finally:
         db.close()
-    _triage(agentic=False)  # turn the new pending orders into reviewable proposals
-    return {"added": added, "batch_no": (index % n) + 1, "total_batches": n}
+
+    return {
+        "added": len(new_ids),
+        "batch_no": min(index + 1, total_sets),
+        "total_batches": total_sets,
+        "exhausted": start >= len(SAMPLE_ORDERS),
+    }
 
 
 def dispatch_stream(actor: str = "Claude agent", limit: int = 25):
