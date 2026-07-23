@@ -328,6 +328,36 @@ st.markdown(
       .statusbar b { color:var(--text-2); font-weight:600; }
       .statusbar .sdot { width:7px; height:7px; border-radius:999px; background:var(--green);
         display:inline-block; }
+
+      /* ---- Autonomous dispatcher feed ---- */
+      .agentbar {
+        display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;
+        border:1px solid var(--border); border-left:3px solid var(--brand); border-radius:10px;
+        padding:.85rem 1.1rem; margin-bottom:1rem; background:var(--surface);
+      }
+      .agentbar .lead { display:flex; align-items:center; gap:.7rem; }
+      .agentbar .glyph { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; flex:none;
+        background:var(--brand-soft); color:var(--brand); font-size:1rem; }
+      .agentbar .h { font-size:.92rem; font-weight:680; color:#f6f9fc; letter-spacing:-.01em; }
+      .agentbar .s { font-size:.75rem; color:var(--text-3); margin-top:1px; }
+      .agentbar .live { font-size:.7rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+        color:var(--brand); display:inline-flex; align-items:center; gap:.4rem; }
+      .agentbar .live .rec { width:8px; height:8px; border-radius:999px; background:var(--brand);
+        display:inline-block; animation:pulse 1.3s ease-in-out infinite; }
+      @keyframes pulse { 0%,100%{opacity:.35} 50%{opacity:1} }
+      .agentbar .metric { text-align:right; }
+      .agentbar .metric b { color:#f6f9fc; font-weight:700; font-variant-numeric:tabular-nums; }
+      .agentbar .metric span { font-size:.72rem; color:var(--text-3); }
+
+      .feedrow { display:flex; align-items:flex-start; gap:.6rem; padding:.28rem 0; font-size:.85rem;
+        color:var(--text-2); line-height:1.5; }
+      .feedrow .ti { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:.72rem; font-weight:700;
+        padding:.12rem .5rem; border-radius:6px; flex:none; margin-top:1px; }
+      .feedrow.call .ti  { background:var(--brand-soft); color:var(--brand); border:1px solid rgba(107,124,255,.28); }
+      .feedrow.ok .ti    { background:rgba(63,185,80,.12); color:var(--green); border:1px solid rgba(63,185,80,.3); }
+      .feedrow.err .ti   { background:var(--safety-soft); color:var(--safety); border:1px solid var(--safety-bd); }
+      .feedrow.say       { color:#cbd5dd; font-style:italic; }
+      .feedrow b { color:var(--text); font-weight:600; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -411,7 +441,7 @@ st.markdown(
         <div class="brandmark">{_LOGO_SVG}</div>
         <div>
           <div class="title">Maintenance Triage Console</div>
-          <div class="subtitle">Claude proposes urgency &amp; crew · a dispatcher approves before anything is assigned</div>
+          <div class="subtitle">Autonomous agent · Claude reads the queue, triages &amp; dispatches each order to a crew itself</div>
         </div>
       </div>
       <div class="appbar-meta">
@@ -470,39 +500,16 @@ with st.sidebar:
     st.markdown("### 🛠️ Triage Console")
     # Remember the dispatcher name across reruns (persists in session state).
     st.session_state.setdefault("approver", "dispatcher")
-    approver = st.text_input("Dispatcher", key="approver", help="Recorded on every approval / rejection.")
+    approver = st.text_input("Dispatcher on record", key="approver",
+                             help="Recorded as the approver on assignments the agent commits.")
 
-    agentic = st.toggle(
-        "Agentic mode — Claude drives the tools",
-        key="agentic_mode",
-        help="Claude calls the read_queue MCP tool itself and submits each triage via a "
-             "tool-use loop (multi-tool). It's never given the write tool — a human still "
-             "approves every assignment.",
+    st.markdown(
+        '<div class="sb-item" style="color:var(--text-2);line-height:1.5">'
+        '🤖 <b>Autonomous mode.</b> Claude drives the tools itself — it reads the queue, '
+        'triages, and dispatches each order to a crew with no button in the loop. New work '
+        'is picked up automatically.</div>',
+        unsafe_allow_html=True,
     )
-
-    if st.button("🤖 Run triage on pending queue", width="stretch", type="primary"):
-        pending = api_get("/stats")["pending_triage"]
-        if pending == 0:
-            st.info("No pending orders — nothing to triage.")
-        else:
-            # Triage in small chunks so a live progress bar can advance; each
-            # chunk commits per order on the backend, so progress persists.
-            mode = "Agent (tool-use)" if agentic else "Claude"
-            prog = st.progress(0.0, text=f"{mode} triaging 0 / {pending}…")
-            done = 0
-            while True:
-                r = api_post("/triage", limit=8, agentic=agentic)
-                if r.get("busy"):
-                    st.warning("A triage run is already in progress — please wait for it to finish.")
-                    break
-                done += r["triaged"]
-                prog.progress(min(1.0, done / pending), text=f"{mode} triaging {done} / {pending}…")
-                if r["triaged"] == 0 or r.get("remaining", 0) == 0:
-                    break
-            prog.empty()
-            st.success(f"Triaged {done} order(s){' via the agent loop' if agentic else ''}.")
-        st.cache_data.clear()
-        st.rerun()
 
     with st.expander("➕ File a new work order"):
         with st.form("new_wo", clear_on_submit=True):
@@ -517,9 +524,9 @@ with st.sidebar:
                         "location": loc or None, "reported_by": rep or None,
                     })
                 if wo.get("status") == "triaged":
-                    st.success("Filed and triaged — it's now in the queue.")
+                    st.success("Filed and triaged — the dispatcher will pick it up.")
                 else:
-                    st.warning("Filed, but auto-triage didn't complete. Use Run triage to classify it.")
+                    st.warning("Filed, but auto-triage didn't complete — the dispatcher will still handle it.")
                 st.cache_data.clear()
                 st.rerun()
 
@@ -559,6 +566,147 @@ with st.sidebar:
             f'<span class="sb-tag">{ago(w.get("rejected_at"))}</span></div>',
             unsafe_allow_html=True,
         )
+
+
+# --------------------------------------------------------------------------- #
+# Autonomous dispatcher — Claude drives the tools; the feed streams live
+# --------------------------------------------------------------------------- #
+_TOOL_LABEL = {
+    "read_queue": "READ", "get_crew_load": "LOAD", "submit_triage": "TRIAGE",
+    "assign_order": "ASSIGN", "reject_order": "REJECT",
+}
+
+
+def _fmt_args(name, inp):
+    inp = inp or {}
+    if name == "read_queue":
+        return f' <b>status={inp.get("status")}</b>'
+    if "work_order_id" in inp:
+        extra = ""
+        if inp.get("crew"):
+            extra = f' → <b>{inp["crew"]}</b>'
+        elif inp.get("urgency"):
+            extra = f' · <b>{inp["urgency"]}</b>'
+        return f' <b>WO-{inp["work_order_id"]}</b>{extra}'
+    return ""
+
+
+def _feed_html(ev):
+    """Render one agent event as an HTML feed row (or None to skip)."""
+    t = ev.get("type")
+    if t == "text":
+        return f'<div class="feedrow say">💬 {ev["text"]}</div>'
+    if t == "tool_call":
+        name = ev["name"]
+        lbl = _TOOL_LABEL.get(name, name.upper())
+        return (f'<div class="feedrow call"><span class="ti">{lbl}</span>'
+                f'<span>calls <b>{name}</b>{_fmt_args(name, ev.get("input"))}</span></div>')
+    if t == "tool_result":
+        ok = ev.get("ok", True)
+        cls, icon = ("ok", "✓") if ok else ("err", "✕")
+        return (f'<div class="feedrow {cls}"><span class="ti">{icon}</span>'
+                f'<span>{ev.get("summary", "")}</span></div>')
+    if t == "error":
+        return f'<div class="feedrow err"><span class="ti">✕</span><span>{ev.get("error", "")}</span></div>'
+    return None
+
+
+def run_dispatch_live(actor):
+    """Consume the dispatcher stream, rendering each event into a live status feed."""
+    log = []
+    with st.status("🤖 Autonomous dispatcher — working the queue…", expanded=True) as status:
+        for ev in api.dispatch_stream(actor=actor, limit=25):
+            t = ev.get("type")
+            if t == "start":
+                continue
+            if t == "busy":
+                status.update(label="Another dispatch run is already in progress…", state="error")
+                log.append(ev)
+                break
+            if t == "done":
+                c = ev["counts"]
+                status.update(
+                    label=f"Dispatch complete — {c['assigned']} assigned · "
+                          f"{c['triaged']} triaged · {c['rejected']} rejected",
+                    state="complete",
+                )
+                log.append(ev)
+                continue
+            html = _feed_html(ev)
+            if html:
+                st.markdown(html, unsafe_allow_html=True)
+            if t == "error":
+                status.update(label="Dispatcher hit an error", state="error")
+            log.append(ev)
+    return log
+
+
+def _log_counts(log):
+    for ev in reversed(log or []):
+        if ev.get("type") in ("done", "error") and ev.get("counts"):
+            return ev["counts"]
+    return None
+
+
+def render_dispatch_idle(have_key, work_to_do):
+    """Static dispatcher bar shown when the agent isn't actively running."""
+    log = st.session_state.get("dispatch_log")
+    counts = _log_counts(log)
+    if not have_key:
+        head = "Autonomous dispatch disabled"
+        sub = "No ANTHROPIC_API_KEY set — add it in Secrets to let Claude drive the queue."
+    elif work_to_do > 0:
+        head = "Orders still open"
+        sub = (f"{work_to_do} order(s) outstanding. Refresh to let the dispatcher take "
+               "another pass, or act on them manually below.")
+    else:
+        head = "Queue clear — dispatcher idle"
+        sub = "Claude has dispatched everything. New work orders are picked up automatically."
+    metric = ""
+    if counts:
+        metric = (
+            f'<div class="metric"><b>{counts["assigned"]}</b> <span>assigned</span>'
+            f'&nbsp;&nbsp;<b>{counts["triaged"]}</b> <span>triaged</span>'
+            f'&nbsp;&nbsp;<b>{counts["rejected"]}</b> <span>rejected</span></div>'
+        )
+    st.markdown(
+        f'<div class="agentbar"><div class="lead"><div class="glyph">🤖</div>'
+        f'<div><div class="h">{head}</div><div class="s">{sub}</div></div></div>{metric}</div>',
+        unsafe_allow_html=True,
+    )
+    if log:
+        with st.expander("View last dispatch run — Claude's tool activity"):
+            for ev in log:
+                html = _feed_html(ev)
+                if html:
+                    st.markdown(html, unsafe_allow_html=True)
+
+
+st.markdown('<div class="eyebrow">Autonomous dispatcher</div>', unsafe_allow_html=True)
+
+# Auto-run the agent whenever there's NEW work (more outstanding than we last
+# observed). Tracking the last-seen count self-throttles the Streamlit rerun
+# loop: a completed run drops the count to ~0, so it won't re-fire until fresh
+# orders arrive. `approver` (from the sidebar) is recorded as the agent's actor.
+_have_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+_work_to_do = stats["pending_triage"] + stats["awaiting_review"]
+_prev_seen = st.session_state.get("dispatch_seen", 0)
+_should_run = _have_key and _work_to_do > 0 and _work_to_do > _prev_seen
+st.session_state["dispatch_seen"] = _work_to_do
+
+if _should_run:
+    st.markdown(
+        f'<div class="agentbar"><div class="lead"><div class="glyph">🤖</div>'
+        f'<div><div class="h">Claude is dispatching the queue</div>'
+        f'<div class="s">{_work_to_do} order(s) outstanding · driving read → triage → assign</div>'
+        f'</div></div><span class="live"><span class="rec"></span>Live</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.session_state["dispatch_log"] = run_dispatch_live(approver)
+    st.cache_data.clear()
+    st.rerun()
+else:
+    render_dispatch_idle(_have_key, _work_to_do)
 
 
 # --------------------------------------------------------------------------- #
@@ -755,7 +903,7 @@ with queue_tab:
     )
 
     if not proposals:
-        st.info("Queue is clear. File work orders and click **Run triage** to have Claude propose assignments.")
+        st.info("Queue is clear — Claude has dispatched everything. File a new work order and the autonomous dispatcher picks it up automatically.")
     elif not shown:
         st.warning("No proposals match the current filters.")
     else:
@@ -813,7 +961,7 @@ st.markdown(
       <div class="grp"><span class="sdot" style="background:{_dot_color}"></span>
         <b>{_status_txt}</b> · in-process backend · {DB_HOST}</div>
       <div class="grp">
-        Human-in-the-loop dispatch · no assignment without approval
+        Autonomous dispatch · Claude drives read → triage → assign
         &nbsp;·&nbsp; Maintenance Triage Console <b>v1.0</b>
       </div>
     </div>

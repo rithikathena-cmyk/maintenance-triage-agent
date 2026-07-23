@@ -1,52 +1,56 @@
 # Maintenance Triage Agent
 
-A human-in-the-loop maintenance dispatcher. An operator files work orders; a
-Claude agent reads the queue, classifies **urgency**, and proposes a technician
-**crew** — but it only *proposes*. A dispatcher approves (or changes the crew)
-on a Streamlit dashboard before any assignment is written.
+A **fully autonomous** maintenance dispatcher. An operator files work orders; a
+Claude agent then drives the entire flow itself — it reads the queue, classifies
+**urgency**, picks a technician **crew**, and **commits the assignment** through
+a real tool-use loop, with no button in the loop. The Streamlit dashboard streams
+the agent's live tool activity as it dispatches.
 
 ```
 Operator ──▶ Work Orders DB
-                  │  read_queue (MCP tool)
-                  ▼
-            Claude AI Agent ── analyze · detect safety risk · classify urgency · pick crew
-                  │  proposed assignment only
-                  ▼
-        Streamlit Triage Dashboard  [ Approve ] [ Change Crew ]
-                  │  Approve
+                  ▲  │  read_queue (MCP tool)
+                  │  ▼
+            Claude AI Agent ── read · triage · pick crew · assign · reject
+                  │  drives the loop itself (up to 40 turns / batch)
                   ▼  write_assignment (MCP tool)
             Assignments DB
+                  │
+                  ▼
+        Streamlit Dashboard ── live agent feed · KPIs · queue · history
 ```
 
-## Design guarantees
+The agent's toolset: `read_queue`, `get_crew_load`, `submit_triage`,
+`assign_order` (writes the assignment), and `reject_order`. It loops until the
+queue is empty, then stops. The dashboard auto-runs it whenever new work appears
+(self-throttled so it fires on new orders, not on every rerun).
 
-- **No assignment without an approval click.** The `write_assignment` MCP tool
-  is never handed to the agent — it is reachable only through the backend's
-  `/assignments/approve` endpoint, which the Approve button calls. (Verified:
-  rendering the dashboard performs zero writes; only a click POSTs.)
-- **Safety keywords always surface at the top.** Any work order mentioning
-  injury risk is force-classified `safety-critical` by a deterministic guard
-  (`backend/services/safety_rules.py`), layered on top of the model, and sorted
-  to the top of the dashboard.
+## Design notes
+
+- **Autonomous by design.** Claude holds the write tool and dispatches without
+  human approval. Manual **Approve / Change crew / Reject** controls remain on
+  each queue card as an override for anything the agent leaves behind.
+- **Safety keywords always escalate.** Any work order mentioning injury risk is
+  force-classified `safety-critical` by a deterministic guard
+  (`backend/services/safety_rules.py`), layered on top of the model — the agent
+  can never downgrade a hazard — and sorted to the top of the dashboard.
 
 ## Dispatcher dashboard
 
 A dark operations console (`frontend/app.py`):
 
+- **Autonomous dispatcher feed** — when there's outstanding work, Claude runs
+  automatically and its tool calls stream into a live feed (READ / TRIAGE /
+  ASSIGN / REJECT rows). When idle it shows the last run's assigned/triaged/
+  rejected tally, with the full activity log in an expander.
 - **KPI tiles** — open orders, safety cases, awaiting review, assigned, rejected
   (backed by `GET /stats`).
-- **Triage queue** — one card per proposal with an urgency chip, a **confidence
-  meter** (the model's own 0–1 score), the suggested crew, its reasoning, and any
-  matched safety keywords. Safety-critical orders are pinned to the top.
-- **Three actions per card** — **Approve** (writes the assignment),
-  **Change crew** (edits the proposal, no assignment), **Reject** (declines with
-  an optional reason; `POST /proposals/{id}/reject`).
+- **Triage queue** — one card per order the agent hasn't yet dispatched, with an
+  urgency chip, a **confidence meter** (the model's own 0–1 score), the crew, its
+  reasoning, and any matched safety keywords. Safety-critical orders pinned first.
+  Manual **Approve / Change crew / Reject** controls act as an override.
 - **Filters** — full-text search, urgency, crew, and a safety-only toggle.
-- **Sidebar** — run triage, file a new order, the live safety-keyword rule list,
-  the crew directory, and a recent-activity feed.
-
-Re-run triage over orders already awaiting review with `POST /triage?rescan=true`
-(never touches assigned or rejected orders).
+- **Sidebar** — file a new order (auto-picked-up by the dispatcher), the live
+  safety-keyword rule list, the crew directory, and a recent-activity feed.
 
 ## Security
 
@@ -58,8 +62,8 @@ ever committed or shared, rotate it in the Anthropic console.
 
 | Server | Tool | Used by |
 | --- | --- | --- |
-| `mcp_servers/queue_server.py` | `read_queue` | the Claude agent (during triage) |
-| `mcp_servers/assignment_server.py` | `write_assignment` | the backend, only on approval |
+| `mcp_servers/queue_server.py` | `read_queue` | the Claude agent (reads the queue) |
+| `mcp_servers/assignment_server.py` | `write_assignment` | the backend, driven by the agent's `assign_order` |
 
 ## Setup
 
@@ -96,8 +100,9 @@ uvicorn backend.main:app --reload
 streamlit run frontend/app.py
 ```
 
-Open the Streamlit URL, click **Run triage on pending queue**, then review and
-approve on the dashboard.
+Open the Streamlit URL. The autonomous dispatcher runs on load whenever the
+queue has work — watch it read, triage, and assign in the live feed. File a new
+order from the sidebar and it's picked up automatically.
 
 ## Layout
 
@@ -105,7 +110,7 @@ approve on the dashboard.
 backend/
   database/   database.py · models.py · seed.py
   api/        workorders.py · assignments.py
-  services/   triage_service · claude_service · safety_rules · assignment_service · mcp_client
+  services/   agent_service (autonomous dispatcher) · triage_service · claude_service · safety_rules · assignment_service · mcp_client
   schemas/    schemas.py
   main.py
 frontend/     app.py

@@ -199,6 +199,21 @@ def _triage(limit=None, agentic=False, rescan=False) -> dict:
         db.close()
 
 
+def dispatch_stream(actor: str = "Claude agent", limit: int = 25):
+    """Stream the autonomous dispatcher's live tool activity (a generator).
+
+    Opens one DB session for the whole agent loop and yields the event dicts
+    from ``agent_service.agentic_dispatch`` straight through to the caller
+    (the Streamlit frontend renders them into a live feed).
+    """
+    ensure_init()
+    db = SessionLocal()
+    try:
+        yield from agent_service.agentic_dispatch(db, actor=actor, limit=limit)
+    finally:
+        db.close()
+
+
 def _create_work_order(payload: dict) -> dict:
     db = SessionLocal()
     try:
