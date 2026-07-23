@@ -11,6 +11,7 @@ bridges Streamlit secrets into os.environ before importing this module).
 """
 import os
 import re
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
@@ -216,6 +217,53 @@ def _triage(limit=None, agentic=False, rescan=False) -> dict:
         return triage_service.run_triage(db, rescan=rescan, limit=limit)
     finally:
         db.close()
+
+
+# Sample-data batches for the manual "Generate next batch" button.
+_SAMPLE_BATCHES = None
+
+
+def _sample_batches():
+    global _SAMPLE_BATCHES
+    if _SAMPLE_BATCHES is None:
+        from backend.database.seed import SAMPLE_ORDERS
+        from backend.database.seed_extra import EXTRA_ORDERS
+        from backend.database.seed_more import MORE_ORDERS
+
+        _SAMPLE_BATCHES = [SAMPLE_ORDERS, EXTRA_ORDERS, MORE_ORDERS]
+    return _SAMPLE_BATCHES
+
+
+def add_sample_batch(index: int) -> dict:
+    """Insert sample batch #index (cycles through the sets), skipping any titles
+    already present, then triage pending orders into proposals so they surface as
+    reviewable cards. Does NOT assign — the dispatcher approves/rejects manually.
+    """
+    ensure_init()
+    batches = _sample_batches()
+    n = len(batches)
+    batch = batches[index % n]
+    db = SessionLocal()
+    try:
+        existing = {t for (t,) in db.query(models.WorkOrder.title).all()}
+        now = datetime.utcnow()
+        added = 0
+        for order in batch:
+            if order["title"] in existing:
+                continue
+            # Some sample sets carry an ``age_hours`` hint to backdate created_at;
+            # it isn't a column, so pull it out before constructing the row.
+            data = {k: v for k, v in order.items() if k != "age_hours"}
+            extra = {}
+            if "age_hours" in order:
+                extra["created_at"] = now - timedelta(hours=order["age_hours"])
+            db.add(models.WorkOrder(status=models.STATUS_PENDING, **data, **extra))
+            added += 1
+        db.commit()
+    finally:
+        db.close()
+    _triage(agentic=False)  # turn the new pending orders into reviewable proposals
+    return {"added": added, "batch_no": (index % n) + 1, "total_batches": n}
 
 
 def dispatch_stream(actor: str = "Claude agent", limit: int = 25):

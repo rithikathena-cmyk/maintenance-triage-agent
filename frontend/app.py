@@ -536,15 +536,23 @@ with st.sidebar:
 
     st.markdown(
         '<div class="sb-item" style="color:var(--text-2);line-height:1.5">'
-        '🤖 <b>Autonomous mode.</b> Claude drives the tools itself — it reads the queue, '
-        'triages, and dispatches each order to a crew. New work is picked up automatically, '
-        'or trigger a pass on demand below.</div>',
+        '🧑‍🔧 <b>Manual mode.</b> Press below to load the next batch of sample work '
+        'orders into the queue. Nothing is dispatched automatically — you review each '
+        'card and <b>Approve</b>, <b>Change crew</b>, or <b>Reject</b>.</div>',
         unsafe_allow_html=True,
     )
 
-    if st.button("🤖 Run triage / dispatch", width="stretch", type="primary",
-                 help="Kick off the autonomous dispatcher over the queue now."):
-        st.session_state["force_dispatch"] = True
+    st.session_state.setdefault("batch_index", 0)
+    if st.button("➕ Generate next batch of orders", width="stretch", type="primary",
+                 help="Insert the next set of sample work orders and add them to the queue for review."):
+        _idx = st.session_state["batch_index"]
+        _res = api.add_sample_batch(_idx)
+        st.session_state["batch_index"] = _idx + 1
+        if _res["added"]:
+            st.toast(f"Added {_res['added']} new orders (batch {_res['batch_no']} of {_res['total_batches']}).")
+        else:
+            st.toast(f"Batch {_res['batch_no']} already loaded — no new orders to add.")
+        st.cache_data.clear()
         st.rerun()
 
     with st.expander("➕ File a new work order"):
@@ -560,9 +568,9 @@ with st.sidebar:
                         "location": loc or None, "reported_by": rep or None,
                     })
                 if wo.get("status") == "triaged":
-                    st.success("Filed and triaged — the dispatcher will pick it up.")
+                    st.success("Filed and triaged — review it in the queue.")
                 else:
-                    st.warning("Filed, but auto-triage didn't complete — the dispatcher will still handle it.")
+                    st.warning("Filed, but auto-triage didn't complete — it'll still appear in the queue.")
                 st.cache_data.clear()
                 st.rerun()
 
@@ -718,35 +726,10 @@ def render_dispatch_idle(have_key, work_to_do):
                     st.markdown(html, unsafe_allow_html=True)
 
 
-st.markdown('<div class="eyebrow">Autonomous dispatcher</div>', unsafe_allow_html=True)
-
-# Auto-run the agent whenever there's NEW work (more outstanding than we last
-# observed). Tracking the last-seen count self-throttles the Streamlit rerun
-# loop: a completed run drops the count to ~0, so it won't re-fire until fresh
-# orders arrive. `approver` (from the sidebar) is recorded as the agent's actor.
-# A manual "Run triage / dispatch" click sets force_dispatch — run even if the
-# queue count hasn't grown since the last pass. Otherwise auto-run only when
-# there's NEW work (more outstanding than last observed), which self-throttles.
-_forced = st.session_state.pop("force_dispatch", False)
-_have_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-_work_to_do = stats["pending_triage"] + stats["awaiting_review"]
-_prev_seen = st.session_state.get("dispatch_seen", 0)
-_should_run = _have_key and (_forced or (_work_to_do > 0 and _work_to_do > _prev_seen))
-st.session_state["dispatch_seen"] = _work_to_do
-
-if _should_run:
-    st.markdown(
-        f'<div class="agentbar"><div class="lead"><div class="glyph">🤖</div>'
-        f'<div><div class="h">Claude is dispatching the queue</div>'
-        f'<div class="s">{_work_to_do} order(s) outstanding · driving read → triage → assign</div>'
-        f'</div></div><span class="live"><span class="rec"></span>Live</span></div>',
-        unsafe_allow_html=True,
-    )
-    st.session_state["dispatch_log"] = run_dispatch_live(approver)
-    st.cache_data.clear()
-    st.rerun()
-else:
-    render_dispatch_idle(_have_key, _work_to_do)
+# Manual mode: nothing runs automatically. Orders enter the queue via the
+# sidebar "Generate next batch of orders" button (or "File a new work order"),
+# which triages them into reviewable proposals. The dispatcher then reviews each
+# card and Approves / Changes crew / Rejects — no autonomous dispatching.
 
 
 # --------------------------------------------------------------------------- #
