@@ -472,7 +472,7 @@ st.markdown(
         <div class="brandmark">{_LOGO_SVG}</div>
         <div>
           <div class="title">Maintenance Triage Console</div>
-          <div class="subtitle">Autonomous agent · Claude reads the queue, triages &amp; dispatches each order to a crew itself</div>
+          <div class="subtitle">Manual dispatch · Claude suggests urgency &amp; crew; you review and assign each order</div>
         </div>
       </div>
       <div class="appbar-meta">
@@ -926,7 +926,7 @@ with queue_tab:
     )
 
     if not proposals:
-        st.info("Queue is clear — Claude has dispatched everything. File a new work order and the autonomous dispatcher picks it up automatically.")
+        st.info("Queue is clear. Press **➕ Generate next batch of orders** in the sidebar to load the next set for review, or file a new work order.")
     elif not shown:
         st.warning("No proposals match the current filters.")
     else:
@@ -984,7 +984,7 @@ st.markdown(
       <div class="grp"><span class="sdot" style="background:{_dot_color}"></span>
         <b>{_status_txt}</b> · in-process backend · {DB_HOST}</div>
       <div class="grp">
-        Autonomous dispatch · Claude drives read → triage → assign
+        Manual dispatch · you review &amp; assign each order
         &nbsp;·&nbsp; Maintenance Triage Console <b>v1.0</b>
       </div>
     </div>
