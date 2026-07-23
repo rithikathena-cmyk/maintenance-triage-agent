@@ -1,5 +1,3 @@
-fastapi>=0.128
-uvicorn[standard]>=0.30
 sqlalchemy>=2.0
 pymysql>=1.1           # MySQL driver — only needed when DATABASE_URL points at hosted MySQL (Aiven)
 cryptography>=42.0     # required by pymysql for MySQL 8 caching_sha2 auth
@@ -9,4 +7,3 @@ python-dotenv>=1.0
 anthropic>=0.69
 mcp>=1.20
 streamlit>=1.56
-requests>=2.32

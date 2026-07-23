@@ -105,11 +105,9 @@ If a key or password was ever committed or shared, rotate it.
 ```
 backend/
   database/   database.py · models.py · sample_orders.py (50-order pool)
-  api/        workorders.py · assignments.py
   services/   triage_service · claude_service · safety_rules · assignment_service · mcp_client
   schemas/    schemas.py
   local_client.py   (in-process backend used by the Streamlit app)
-  main.py           (optional standalone FastAPI app; not used by the deploy)
 frontend/     app.py
 mcp_servers/  queue_server.py · assignment_server.py
 ```

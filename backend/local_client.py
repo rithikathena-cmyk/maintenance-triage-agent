@@ -21,7 +21,7 @@ from backend.database.database import (
     init_db,
 )
 from backend.schemas.schemas import AssignmentOut, ProposalOut, WorkOrderOut
-from backend.services import agent_service, assignment_service, triage_service
+from backend.services import assignment_service, triage_service
 from backend.services.mcp_client import ASSIGNMENT_SERVER, QUEUE_SERVER, ping_server
 from backend.services.safety_rules import (
     CREWS,
@@ -182,16 +182,6 @@ def _work_orders(status=None) -> list:
 # --------------------------------------------------------------------------- #
 # Writes
 # --------------------------------------------------------------------------- #
-def _triage(limit=None, agentic=False, rescan=False) -> dict:
-    db = SessionLocal()
-    try:
-        if agentic:
-            return agent_service.agentic_triage(db, limit=limit or 8)
-        return triage_service.run_triage(db, rescan=rescan, limit=limit)
-    finally:
-        db.close()
-
-
 def reset_all() -> dict:
     """Delete every assignment, proposal, and work order — a clean slate.
 
@@ -254,21 +244,6 @@ def add_sample_batch(index: int) -> dict:
         "total_batches": total_sets,
         "exhausted": start >= len(SAMPLE_ORDERS),
     }
-
-
-def dispatch_stream(actor: str = "Claude agent", limit: int = 25):
-    """Stream the autonomous dispatcher's live tool activity (a generator).
-
-    Opens one DB session for the whole agent loop and yields the event dicts
-    from ``agent_service.agentic_dispatch`` straight through to the caller
-    (the Streamlit frontend renders them into a live feed).
-    """
-    ensure_init()
-    db = SessionLocal()
-    try:
-        yield from agent_service.agentic_dispatch(db, actor=actor, limit=limit)
-    finally:
-        db.close()
 
 
 def _create_work_order(payload: dict) -> dict:
@@ -347,12 +322,6 @@ def get(path, **params):
 def post(path, json=None, **params):
     ensure_init()
     body = json or {}
-    if path == "/triage":
-        return _triage(
-            limit=params.get("limit"),
-            agentic=bool(params.get("agentic", False)),
-            rescan=bool(params.get("rescan", False)),
-        )
     if path == "/work-orders":
         return _create_work_order(body)
     if path == "/assignments/approve":

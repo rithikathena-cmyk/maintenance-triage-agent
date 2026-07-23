@@ -86,5 +86,3 @@ secrets or local data ship.
   driver and strips the `ssl-mode` query param automatically.
 - **Data durability**: hosted MySQL persists across restarts; SQLite on Community
   Cloud does not (the disk is ephemeral).
-- The FastAPI app (`backend/main.py`) still exists for a standalone API
-  (`uvicorn backend.main:app`) but is not used by the Streamlit deploy.
