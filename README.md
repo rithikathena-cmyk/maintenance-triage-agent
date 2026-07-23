@@ -1,69 +1,68 @@
-# Maintenance Triage Agent
+# Maintenance Triage Console
 
-A **fully autonomous** maintenance dispatcher. An operator files work orders; a
-Claude agent then drives the entire flow itself — it reads the queue, classifies
-**urgency**, picks a technician **crew**, and **commits the assignment** through
-a real tool-use loop, with no button in the loop. The Streamlit dashboard streams
-the agent's live tool activity as it dispatches.
+A **human-in-the-loop** maintenance dispatcher. Operators file work orders; a
+Claude agent proposes an **urgency** level and a technician **crew** for each one;
+a dispatcher reviews every card and **Approves**, **Changes crew**, or **Rejects**.
+Nothing is ever assigned without a human click — the write path lives only behind
+the Approve button.
 
 ```
 Operator ──▶ Work Orders DB
                   ▲  │  read_queue (MCP tool)
                   │  ▼
-            Claude AI Agent ── read · triage · pick crew · assign · reject
-                  │  drives the loop itself (up to 40 turns / batch)
-                  ▼  write_assignment (MCP tool)
-            Assignments DB
+            Claude ── proposes urgency + crew (never assigns)
                   │
                   ▼
-        Streamlit Dashboard ── live agent feed · KPIs · queue · history
+        Dispatcher reviews each card
+          Approve / Change crew / Reject
+                  │  write_assignment (MCP tool, only on Approve)
+                  ▼
+            Assignments DB
 ```
 
-The agent's toolset: `read_queue`, `get_crew_load`, `submit_triage`,
-`assign_order` (writes the assignment), and `reject_order`. It loops until the
-queue is empty, then stops. The dashboard auto-runs it whenever new work appears
-(self-throttled so it fires on new orders, not on every rerun).
-
-## Design notes
-
-- **Autonomous by design.** Claude holds the write tool and dispatches without
-  human approval. Manual **Approve / Change crew / Reject** controls remain on
-  each queue card as an override for anything the agent leaves behind.
-- **Safety keywords always escalate.** Any work order mentioning injury risk is
+- **Manual by design.** Claude only *proposes*; a dispatcher decides. The write
+  MCP tool (`write_assignment`) is never handed to the agent — it fires only when
+  a human clicks Approve.
+- **Safety keywords always flag.** Any work order mentioning injury risk is
   force-classified `safety-critical` by a deterministic guard
   (`backend/services/safety_rules.py`), layered on top of the model — the agent
-  can never downgrade a hazard — and sorted to the top of the dashboard.
+  can never downgrade a hazard.
 
 ## Dispatcher dashboard
 
 A dark operations console (`frontend/app.py`):
 
-- **Autonomous dispatcher feed** — when there's outstanding work, Claude runs
-  automatically and its tool calls stream into a live feed (READ / TRIAGE /
-  ASSIGN / REJECT rows). When idle it shows the last run's assigned/triaged/
-  rejected tally, with the full activity log in an expander.
-- **KPI tiles** — open orders, safety cases, awaiting review, assigned, rejected
-  (backed by `GET /stats`).
-- **Triage queue** — one card per order the agent hasn't yet dispatched, with an
-  urgency chip, a **confidence meter** (the model's own 0–1 score), the crew, its
-  reasoning, and any matched safety keywords. Safety-critical orders pinned first.
-  Manual **Approve / Change crew / Reject** controls act as an override.
+- **Generate next batch of orders** — the sidebar button loads the next set of 10
+  sample work orders (from a 50-order pool, `backend/database/sample_orders.py`)
+  and triages them into reviewable cards. Press again for the next set.
+- **Reset queue** — clears all orders, proposals, and assignments to start fresh.
+- **KPI tiles** — open orders, safety cases, awaiting review, assigned, rejected.
+- **Triage queue** — one card per proposal with an urgency chip, a confidence
+  meter (the model's own 0–1 score), the crew, its reasoning, and any matched
+  safety keywords. Manual **Approve / Change crew / Reject** on each.
 - **Filters** — full-text search, urgency, crew, and a safety-only toggle.
-- **Sidebar** — file a new order (auto-picked-up by the dispatcher), the live
-  safety-keyword rule list, the crew directory, and a recent-activity feed.
+- **Sidebar** — generate/reset, file a new order, the safety-keyword rule list,
+  the crew directory, and a recent-activity feed.
 
-## Security
+## Database
 
-`.env` holds your database password and `ANTHROPIC_API_KEY`; it is gitignored.
-Copy `.env.example` to `.env` to configure a fresh checkout. If a real key was
-ever committed or shared, rotate it in the Anthropic console.
+The app uses **SQLAlchemy** and works on either:
+
+- **Local SQLite** (default) — a `maintenance_triage.sqlite3` file created at the
+  repo root on first run. Zero setup. On Streamlit Community Cloud this file is
+  ephemeral (resets on reboot), so it's great for a demo but not durable.
+- **Hosted MySQL** (e.g. [Aiven](https://aiven.io), free) — set `DATABASE_URL` for
+  data that persists across restarts. TLS is handled in code.
+
+Set the database via the `DATABASE_URL` environment variable / Streamlit secret;
+leave it unset to use local SQLite. See [DEPLOY.md](DEPLOY.md).
 
 ## Two MCP tools
 
 | Server | Tool | Used by |
 | --- | --- | --- |
-| `mcp_servers/queue_server.py` | `read_queue` | the Claude agent (reads the queue) |
-| `mcp_servers/assignment_server.py` | `write_assignment` | the backend, driven by the agent's `assign_order` |
+| `mcp_servers/queue_server.py` | `read_queue` | reading the queue for triage |
+| `mcp_servers/assignment_server.py` | `write_assignment` | committing an assignment on Approve |
 
 ## Setup
 
@@ -71,48 +70,46 @@ ever committed or shared, rotate it in the Anthropic console.
    ```bash
    pip install -r requirements.txt
    ```
-
-2. **Configure `.env`** — set your MySQL credentials in `DATABASE_URL`
-   (`mysql+pymysql://root:PASSWORD@localhost:3306/maintenance_triage`).
-   Optionally set `ANTHROPIC_API_KEY` (without it, triage falls back to a
-   transparent keyword heuristic so the app still runs end-to-end).
-
-3. **Create the database** (one time)
-   ```bash
-   mysql -u root -p -e "CREATE DATABASE maintenance_triage;"
+2. **(Optional) configure `.env`**
    ```
-
-4. **Create tables + seed sample data**
-   ```bash
-   python -m backend.database.seed
+   # Leave DATABASE_URL unset to use local SQLite, or point at hosted MySQL:
+   # DATABASE_URL=mysql://user:pass@host:port/dbname?ssl-mode=REQUIRED
+   ANTHROPIC_API_KEY=sk-ant-...     # optional; without it, triage uses a keyword heuristic
+   CLAUDE_MODEL=claude-opus-4-8
    ```
+   Without `ANTHROPIC_API_KEY` the app still runs end-to-end using a transparent
+   keyword heuristic for triage.
 
 ## Run
 
-Three processes (the MCP servers are spawned on demand by the backend — you do
-not start them yourself):
-
 ```bash
-# 1. Backend API
-uvicorn backend.main:app --reload
-
-# 2. Frontend dashboard
 streamlit run frontend/app.py
 ```
 
-Open the Streamlit URL. The autonomous dispatcher runs on load whenever the
-queue has work — watch it read, triage, and assign in the live feed. File a new
-order from the sidebar and it's picked up automatically.
+Open the Streamlit URL. Press **Generate next batch of orders** in the sidebar to
+load work orders, then review each card and Approve / Change crew / Reject.
+
+## Deploy
+
+See [DEPLOY.md](DEPLOY.md) — deploy to Streamlit Community Cloud, with optional
+hosted MySQL (Aiven) for persistent data.
+
+## Security
+
+`.env` holds your `DATABASE_URL` (with password) and `ANTHROPIC_API_KEY`; it is
+gitignored. On Streamlit Cloud these go in **Secrets**, never in a committed file.
+If a key or password was ever committed or shared, rotate it.
 
 ## Layout
 
 ```
 backend/
-  database/   database.py · models.py · seed.py
+  database/   database.py · models.py · sample_orders.py (50-order pool)
   api/        workorders.py · assignments.py
-  services/   agent_service (autonomous dispatcher) · triage_service · claude_service · safety_rules · assignment_service · mcp_client
+  services/   triage_service · claude_service · safety_rules · assignment_service · mcp_client
   schemas/    schemas.py
-  main.py
+  local_client.py   (in-process backend used by the Streamlit app)
+  main.py           (optional standalone FastAPI app; not used by the deploy)
 frontend/     app.py
 mcp_servers/  queue_server.py · assignment_server.py
 ```
