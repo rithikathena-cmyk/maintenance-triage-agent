@@ -506,10 +506,15 @@ with st.sidebar:
     st.markdown(
         '<div class="sb-item" style="color:var(--text-2);line-height:1.5">'
         '🤖 <b>Autonomous mode.</b> Claude drives the tools itself — it reads the queue, '
-        'triages, and dispatches each order to a crew with no button in the loop. New work '
-        'is picked up automatically.</div>',
+        'triages, and dispatches each order to a crew. New work is picked up automatically, '
+        'or trigger a pass on demand below.</div>',
         unsafe_allow_html=True,
     )
+
+    if st.button("🤖 Run triage / dispatch", width="stretch", type="primary",
+                 help="Kick off the autonomous dispatcher over the queue now."):
+        st.session_state["force_dispatch"] = True
+        st.rerun()
 
     with st.expander("➕ File a new work order"):
         with st.form("new_wo", clear_on_submit=True):
@@ -688,10 +693,14 @@ st.markdown('<div class="eyebrow">Autonomous dispatcher</div>', unsafe_allow_htm
 # observed). Tracking the last-seen count self-throttles the Streamlit rerun
 # loop: a completed run drops the count to ~0, so it won't re-fire until fresh
 # orders arrive. `approver` (from the sidebar) is recorded as the agent's actor.
+# A manual "Run triage / dispatch" click sets force_dispatch — run even if the
+# queue count hasn't grown since the last pass. Otherwise auto-run only when
+# there's NEW work (more outstanding than last observed), which self-throttles.
+_forced = st.session_state.pop("force_dispatch", False)
 _have_key = bool(os.getenv("ANTHROPIC_API_KEY"))
 _work_to_do = stats["pending_triage"] + stats["awaiting_review"]
 _prev_seen = st.session_state.get("dispatch_seen", 0)
-_should_run = _have_key and _work_to_do > 0 and _work_to_do > _prev_seen
+_should_run = _have_key and (_forced or (_work_to_do > 0 and _work_to_do > _prev_seen))
 st.session_state["dispatch_seen"] = _work_to_do
 
 if _should_run:
