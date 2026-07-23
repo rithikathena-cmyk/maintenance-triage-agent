@@ -397,12 +397,35 @@ if not online:
         """,
         unsafe_allow_html=True,
     )
-    st.error("Could not open the local SQLite database.")
-    st.info(
-        "The app uses a local SQLite file (`maintenance_triage.sqlite3`) created "
-        "automatically on first run — no database to configure. If this persists, "
-        "check that the app has write permission to its working directory."
-    )
+    _is_hosted = _DB_URL.startswith("mysql")
+    if _is_hosted:
+        st.error(f"Could not connect to the database at **{DB_HOST}**.")
+        _err = _DB_LAST_ERROR.lower()
+        if "access denied" in _err:
+            st.warning(
+                "**Access denied** — the username or password in `DATABASE_URL` is "
+                "wrong. In **Manage app → Settings → Secrets**, re-paste the exact "
+                "connection string (password must match character-for-character), "
+                "**Save**, then **Reboot** the app."
+            )
+        elif "can't connect" in _err or "timed out" in _err or "2003" in _err:
+            st.warning(
+                "**Can't reach the host** — check the host/port, that the database "
+                "service is running, and that its IP allowlist permits Streamlit "
+                "Cloud (allow all IPs, or add the app's egress IP)."
+            )
+        else:
+            st.warning(
+                "Double-check the `DATABASE_URL` host, port, user, password, and "
+                "database name in **Settings → Secrets**, then **Reboot** the app."
+            )
+    else:
+        st.error("Could not open the local SQLite database.")
+        st.info(
+            "The app uses a local SQLite file (`maintenance_triage.sqlite3`) created "
+            "automatically on first run. If this persists, check that the app has "
+            "write permission to its working directory."
+        )
     if _DB_LAST_ERROR:
         st.caption("Underlying error (for debugging):")
         st.code(_DB_LAST_ERROR, language="text")
