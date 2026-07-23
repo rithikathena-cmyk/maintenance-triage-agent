@@ -27,7 +27,6 @@ from backend.services.safety_rules import (
     CREWS,
     SAFETY_KEYWORDS,
     URGENCY_LEVELS,
-    urgency_rank,
 )
 
 _initialized = False
@@ -151,13 +150,9 @@ def _proposals() -> list:
             .filter(models.WorkOrder.status == "triaged")
             .all()
         )
-        rows.sort(
-            key=lambda p: (
-                0 if p.is_safety_critical else 1,
-                urgency_rank(p.proposed_urgency),
-                p.work_order.created_at,
-            )
-        )
+        # Chronological (as-generated) order — safety-critical orders are no
+        # longer pinned to the top; they appear mixed in with the rest.
+        rows.sort(key=lambda p: (p.work_order.created_at, p.work_order.id))
         return [_proposal_dict(p) for p in rows]
     finally:
         db.close()

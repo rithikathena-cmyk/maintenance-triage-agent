@@ -948,7 +948,7 @@ with queue_tab:
                 f'<div style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.38);'
                 f'border-radius:11px;padding:.65rem .95rem;margin-bottom:.85rem;color:#f87171;'
                 f'font-weight:650;font-size:.9rem">'
-                f'⚠️ {n_crit} safety-critical order(s) pinned to the top of the queue — review first.</div>',
+                f'⚠️ {n_crit} safety-critical order(s) in the queue — don\'t miss them.</div>',
                 unsafe_allow_html=True,
             )
         for p in shown:
