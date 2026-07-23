@@ -96,7 +96,7 @@ def backend_online():
     """
     global _DB_LAST_ERROR
     try:
-        api.get("/stats")
+        get_stats()  # cached — also serves as the reachability probe
         _DB_LAST_ERROR = ""
         return True
     except Exception as exc:
@@ -108,6 +108,30 @@ def backend_online():
             root = nxt
         _DB_LAST_ERROR = f"{type(root).__name__}: {root}"
         return False
+
+
+# Cached reads. Streamlit re-runs the whole script on every interaction; over a
+# remote (Aiven) database each query is a network round-trip, so caching collapses
+# the ~10 per-rerun queries (some duplicated) down to a handful. A short TTL keeps
+# the UI fresh, and every action calls st.cache_data.clear() to force a refresh.
+@st.cache_data(ttl=8)
+def get_stats():
+    return api_get("/stats")
+
+
+@st.cache_data(ttl=8)
+def get_proposals():
+    return api_get("/proposals")
+
+
+@st.cache_data(ttl=8)
+def get_assignments():
+    return api_get("/assignments")
+
+
+@st.cache_data(ttl=8)
+def get_rejected():
+    return api_get("/work-orders", status="rejected")
 
 
 @st.cache_data(ttl=60)
@@ -498,7 +522,7 @@ st.markdown(
 # --------------------------------------------------------------------------- #
 # KPI tiles
 # --------------------------------------------------------------------------- #
-stats = api_get("/stats")
+stats = get_stats()
 
 
 def kpi(col, label, value, accent, foot=""):
@@ -605,8 +629,8 @@ with st.sidebar:
     st.markdown("<hr>", unsafe_allow_html=True)
 
     st.markdown('<div class="sb-h">📜 Recent activity</div>', unsafe_allow_html=True)
-    recent_assigns = api_get("/assignments")[:5]
-    rejected = [w for w in api_get("/work-orders", status="rejected")]
+    recent_assigns = get_assignments()[:5]
+    rejected = [w for w in get_rejected()]
     rejected.sort(key=lambda w: w.get("rejected_at") or "", reverse=True)
     if not recent_assigns and not rejected:
         st.caption("No approvals or rejections yet.")
@@ -813,7 +837,7 @@ def matches(p):
 queue_tab, history_tab = st.tabs(["📋  Triage Queue", "🗂️  Assignment History"])
 
 with queue_tab:
-    proposals = api_get("/proposals")
+    proposals = get_proposals()
     shown = [p for p in proposals if matches(p)]
     n_crit = sum(1 for p in shown if p["is_safety_critical"])
 
@@ -841,7 +865,7 @@ with queue_tab:
             render_card(p)
 
 with history_tab:
-    assignments = api_get("/assignments")
+    assignments = get_assignments()
     if not assignments:
         st.info("No assignments yet. Approved proposals appear here.")
     else:
