@@ -20,13 +20,18 @@ DEFAULT_SQLITE_PATH = os.path.join(_REPO_ROOT, "maintenance_triage.sqlite3")
 
 
 def normalize_url(url: str) -> str:
-    """Strip ``ssl-*`` query params from MySQL URLs.
+    """Make a hosted-MySQL URL safe to use as-is.
 
-    Hosted MySQL providers (Aiven, etc.) hand you a URL ending in
-    ``?ssl-mode=REQUIRED``, but pymysql doesn't accept ``ssl-mode`` as a connect
-    kwarg and raises TypeError. We enforce TLS ourselves via certifi in
-    ``connect_args_for``, so these URL params are redundant — drop them.
+    Providers like Aiven hand you a raw ``mysql://user:pass@host:port/db?ssl-mode=REQUIRED``.
+    Two things break with that verbatim:
+
+    1. Bare ``mysql://`` makes SQLAlchemy default to the ``MySQLdb`` driver, which
+       isn't installed → ModuleNotFoundError. Force the installed ``pymysql``.
+    2. pymysql rejects the ``ssl-mode`` query param → TypeError. We enforce TLS
+       ourselves in ``connect_args_for``, so drop any ``ssl-*`` params.
     """
+    if url.startswith("mysql://"):
+        url = "mysql+pymysql://" + url[len("mysql://"):]
     if not url.startswith("mysql"):
         return url
     parts = urlsplit(url)

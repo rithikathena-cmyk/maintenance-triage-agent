@@ -25,8 +25,10 @@ _DEFAULT_URL = f"sqlite:///{os.path.join(_REPO_ROOT, 'maintenance_triage.sqlite3
 
 
 def _normalize_url(url: str) -> str:
-    """Drop ssl-* query params from MySQL URLs (pymysql rejects ssl-mode; we do TLS
-    via certifi in _connect_args instead)."""
+    """Force the pymysql driver for bare mysql:// URLs and drop ssl-* query params
+    (pymysql rejects ssl-mode; we do TLS via certifi in _connect_args instead)."""
+    if url.startswith("mysql://"):
+        url = "mysql+pymysql://" + url[len("mysql://"):]
     if not url.startswith("mysql"):
         return url
     from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
