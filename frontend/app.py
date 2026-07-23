@@ -559,6 +559,14 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    if st.button("🗑 Reset queue", width="stretch",
+                 help="Clear ALL work orders, proposals, and assignments — start from an empty queue."):
+        _r = api.reset_all()
+        st.session_state["batch_index"] = 0
+        st.toast(f"Cleared {_r['removed']} orders — queue is empty. Press Generate to start over.")
+        st.cache_data.clear()
+        st.rerun()
+
     with st.expander("➕ File a new work order"):
         with st.form("new_wo", clear_on_submit=True):
             t = st.text_input("Title")

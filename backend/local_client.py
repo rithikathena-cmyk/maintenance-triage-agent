@@ -197,6 +197,25 @@ def _triage(limit=None, agentic=False, rescan=False) -> dict:
         db.close()
 
 
+def reset_all() -> dict:
+    """Delete every assignment, proposal, and work order — a clean slate.
+
+    Children (assignments, proposals) are removed before the work orders they
+    reference so the FK constraints are satisfied on any dialect.
+    """
+    ensure_init()
+    db = SessionLocal()
+    try:
+        removed = db.query(models.WorkOrder).count()
+        db.query(models.Assignment).delete(synchronize_session=False)
+        db.query(models.Proposal).delete(synchronize_session=False)
+        db.query(models.WorkOrder).delete(synchronize_session=False)
+        db.commit()
+        return {"removed": removed}
+    finally:
+        db.close()
+
+
 def add_sample_batch(index: int) -> dict:
     """Reveal the next set (page) of the 50-order sample pool.
 
