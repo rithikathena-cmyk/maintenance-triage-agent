@@ -15,7 +15,11 @@ import re
 from sqlalchemy import text
 
 from backend.database import models
-from backend.database.database import SessionLocal, engine, init_db
+from backend.database.database import (
+    SessionLocal,
+    engine,
+    init_db,
+)
 from backend.schemas.schemas import AssignmentOut, ProposalOut, WorkOrderOut
 from backend.services import agent_service, assignment_service, triage_service
 from backend.services.mcp_client import ASSIGNMENT_SERVER, QUEUE_SERVER, ping_server
@@ -35,7 +39,11 @@ def ensure_init():
     if _initialized:
         return
     init_db()
-    if os.getenv("SEED_ON_START", "").lower() in ("1", "true", "yes"):
+    # Seed sample orders when asked (SEED_ON_START), or automatically when the
+    # database is empty — a fresh SQLite file is useless without seed data. The
+    # seed() call is itself a no-op if the table already has rows.
+    _seed_flag = os.getenv("SEED_ON_START", "").lower() in ("1", "true", "yes")
+    if _seed_flag or _db_is_empty():
         try:
             from backend.database.seed import seed
 
@@ -43,6 +51,17 @@ def ensure_init():
         except Exception:
             pass
     _initialized = True
+
+
+def _db_is_empty() -> bool:
+    """True when there are no work orders yet (fresh database)."""
+    db = SessionLocal()
+    try:
+        return db.query(models.WorkOrder).count() == 0
+    except Exception:
+        return False
+    finally:
+        db.close()
 
 
 # --------------------------------------------------------------------------- #
