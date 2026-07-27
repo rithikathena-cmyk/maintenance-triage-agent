@@ -149,27 +149,27 @@ def add_sample_batch(index: int) -> dict:
     db = SessionLocal()
     try:
         existing = {t for (t,) in db.query(models.WorkOrder.title).all()}
-        new_ids = []
+        new_orders = []
         for order in chunk:
             if order["title"] in existing:
                 continue
             wo = models.WorkOrder(status=models.STATUS_PENDING, **order)
             db.add(wo)
-            db.flush()  # assign wo.id without ending the transaction
-            new_ids.append(wo.id)
-        db.commit()
+            new_orders.append(wo)
+        db.commit()  # persist the filed orders even if triaging them fails below
 
         # Triage each new order in place (propose urgency/crew → a reviewable
-        # proposal). This is the deterministic path; it never assigns.
-        for wid in new_ids:
-            wo = db.get(models.WorkOrder, wid)
-            if wo is not None:
-                triage_service.triage_work_order(db, wo)
+        # proposal), one commit for the whole batch rather than one per order —
+        # each commit is a real round trip on a hosted DB, and staging a failed
+        # order never touches the DB, so batching the commit is safe.
+        for wo in new_orders:
+            triage_service.stage_triage(db, wo)
+        db.commit()
     finally:
         db.close()
 
     return {
-        "added": len(new_ids),
+        "added": len(new_orders),
         "batch_no": min(index + 1, total_sets),
         "total_batches": total_sets,
         "exhausted": start >= len(SAMPLE_ORDERS),

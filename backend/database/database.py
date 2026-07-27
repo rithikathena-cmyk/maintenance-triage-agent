@@ -91,7 +91,18 @@ engine = create_engine(
     connect_args=connect_args_for(DATABASE_URL),
 )
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    future=True,
+    # Attributes stay populated after commit — avoids a round trip to re-fetch
+    # them on next access, which matters on a hosted DB (Aiven) where every
+    # round trip costs real network latency. Callers that need a guaranteed
+    # fresh read (e.g. after an external writer committed) already call
+    # db.refresh()/db.rollback() explicitly where that matters.
+    expire_on_commit=False,
+)
 Base = declarative_base()
 
 

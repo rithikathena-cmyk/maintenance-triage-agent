@@ -46,7 +46,11 @@ def _upsert_proposal(db: Session, work_order: models.WorkOrder, proposal_data: d
     final_urgency, is_critical, keywords = apply_safety_override(
         work_order.description, proposal_data["urgency"]
     )
-    proposal = work_order.proposal or models.Proposal(work_order_id=work_order.id)
+    # A pending order can never already have a proposal (that's what triaged
+    # means), so skip the lazy-load lookup in that common case — it's an extra
+    # round trip per order on a hosted DB otherwise.
+    existing = None if work_order.status == models.STATUS_PENDING else work_order.proposal
+    proposal = existing or models.Proposal(work_order_id=work_order.id)
     proposal.proposed_urgency = final_urgency
     proposal.proposed_crew = proposal_data["crew"]
     proposal.is_safety_critical = is_critical
@@ -61,12 +65,15 @@ def _upsert_proposal(db: Session, work_order: models.WorkOrder, proposal_data: d
     return proposal
 
 
-def triage_work_order(db: Session, work_order: models.WorkOrder) -> bool:
-    """Triage one work order in place — used for auto-triage on creation.
+def stage_triage(db: Session, work_order: models.WorkOrder) -> bool:
+    """Classify and upsert a proposal for one order, WITHOUT committing.
 
-    Best-effort: on any failure the order is simply left ``pending`` (it can be
-    picked up later by a manual Run triage) rather than raising, so a Claude
-    hiccup never blocks an order from being filed. Returns True if triaged.
+    Lets a caller triaging several orders in one pass (e.g. a generated batch)
+    do a single commit at the end instead of one round trip per order — the
+    dominant cost on a hosted DB, where each commit is real network latency.
+    Best-effort: on failure nothing has touched the DB yet (propose_triage is
+    a pure API/heuristic call, no writes happen until after it returns), so
+    the caller's session stays perfectly usable for the next order.
     """
     try:
         proposal_data = agent.propose_triage(
@@ -75,18 +82,32 @@ def triage_work_order(db: Session, work_order: models.WorkOrder) -> bool:
             location=work_order.location,
         )
         _upsert_proposal(db, work_order, proposal_data)
-        db.commit()
         return True
     except Exception:
+        return False
+
+
+def triage_work_order(db: Session, work_order: models.WorkOrder) -> bool:
+    """Triage and commit one work order in place — used for auto-triage on creation.
+
+    Best-effort: on any failure the order is simply left ``pending`` (it can be
+    picked up later by a manual Run triage) rather than raising, so a Claude
+    hiccup never blocks an order from being filed. Returns True if triaged.
+    """
+    if not stage_triage(db, work_order):
         db.rollback()
         return False
+    db.commit()
+    return True
 
 
 def _apply_agentic_proposals(db: Session, proposals: list[dict]) -> int:
     """Persist proposals Claude submitted via the agentic tool-use loop.
 
     Skips any work order the agent named that isn't actually still pending
-    (e.g. a stale id) rather than failing the whole batch.
+    (e.g. a stale id) rather than failing the whole batch. One commit for the
+    whole batch, not one per order — each commit is a real round trip on a
+    hosted DB, and staging never touches the DB, so batching it is safe.
     """
     triaged = 0
     for proposal_data in proposals:
@@ -95,10 +116,10 @@ def _apply_agentic_proposals(db: Session, proposals: list[dict]) -> int:
             continue
         try:
             _upsert_proposal(db, work_order, proposal_data)
-            db.commit()
             triaged += 1
         except Exception:
-            db.rollback()
+            pass  # malformed proposal (e.g. a missing field) — skip it, keep the rest
+    db.commit()
     return triaged
 
 
