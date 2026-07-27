@@ -10,7 +10,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from backend.database import models
-from backend.services.mcp_client import ASSIGNMENT_SERVER, run_tool
+from backend.services import mcp_client
 from backend.services.safety_rules import CREWS
 
 
@@ -88,16 +88,12 @@ def approve(
         raise AssignmentError(f"Unknown crew '{crew}'")
 
     # This is the only call site of the write MCP tool in the whole system.
-    result = run_tool(
-        ASSIGNMENT_SERVER,
-        "write_assignment",
-        {
-            "work_order_id": work_order_id,
-            "crew": crew,
-            "urgency": proposal.proposed_urgency,
-            "is_safety_critical": proposal.is_safety_critical,
-            "approved_by": approved_by,
-        },
+    result = mcp_client.write_assignment(
+        work_order_id=work_order_id,
+        crew=crew,
+        urgency=proposal.proposed_urgency,
+        is_safety_critical=proposal.is_safety_critical,
+        approved_by=approved_by,
     )
     if not result.get("ok"):
         raise AssignmentError(result.get("error", "write_assignment failed"))

@@ -11,7 +11,7 @@ keyword heuristic so the whole app still runs end-to-end for demos.
 import json
 import os
 
-from backend.services.mcp_client import QUEUE_SERVER, run_tool
+from backend.services import mcp_client
 from backend.services.prompts import AGENT_SYSTEM, AGENT_TOOLS, OUTPUT_SCHEMA, SYSTEM_PROMPT
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
@@ -119,7 +119,7 @@ def propose_triage(title: str, description: str, location: str | None = None) ->
 def _exec_read_queue(tool_input: dict, limit: int) -> str:
     """Run the REAL read_queue MCP tool; cap what the agent sees at `limit`."""
     status = tool_input.get("status", "pending")
-    rows = run_tool(QUEUE_SERVER, "read_queue", {"status": status, "limit": limit})
+    rows = mcp_client.read_queue(status, limit)
     return json.dumps(rows)
 
 

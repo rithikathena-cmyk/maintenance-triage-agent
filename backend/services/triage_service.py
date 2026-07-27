@@ -20,18 +20,12 @@ import threading
 from sqlalchemy.orm import Session
 
 from backend.database import models
-from backend.services import agent
-from backend.services.mcp_client import QUEUE_SERVER, run_tool
+from backend.services import agent, mcp_client
 from backend.services.safety_rules import apply_safety_override
 
 # Guards against two overlapping triage runs racing over the same pending
 # orders (which wastes Claude calls and can collide on the proposals table).
 _triage_lock = threading.Lock()
-
-
-def _read_queue(status: str):
-    """Read work orders of a given lifecycle status through the queue MCP server."""
-    return run_tool(QUEUE_SERVER, "read_queue", {"status": status})
 
 
 def _pending_count(db: Session) -> int:
@@ -153,9 +147,9 @@ def run_triage(db: Session, rescan: bool = False, limit: int | None = None) -> d
 
         # Classic per-order fallback: no API key, agentic loop errored, or a
         # rescan (which re-triages already-triaged orders too).
-        queue = _read_queue(models.STATUS_PENDING)
+        queue = mcp_client.read_queue(models.STATUS_PENDING)
         if rescan:
-            queue = queue + _read_queue(models.STATUS_TRIAGED)
+            queue = queue + mcp_client.read_queue(models.STATUS_TRIAGED)
         if limit is not None:
             queue = queue[:limit]
 

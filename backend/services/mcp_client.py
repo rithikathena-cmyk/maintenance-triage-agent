@@ -153,3 +153,34 @@ def ping_server(server_script: str):
             _stdio_unavailable = True
     _load_server_module(server_script)  # ensure it imports (raises if truly broken)
     return list(_INPROCESS_TOOLS.get(server_script, []))
+
+
+# --------------------------------------------------------------------------- #
+# The two MCP tools, typed — every other module calls these instead of
+# building raw run_tool(server, name, arguments) calls itself, so this file
+# stays the one place that knows the wire-level shape of each tool.
+# --------------------------------------------------------------------------- #
+def read_queue(status: str = "pending", limit: int = 100) -> list:
+    """Read work orders from the queue via the read_queue MCP tool."""
+    return run_tool(QUEUE_SERVER, "read_queue", {"status": status, "limit": limit})
+
+
+def write_assignment(
+    *, work_order_id: int, crew: str, urgency: str, is_safety_critical: bool, approved_by: str
+) -> dict:
+    """Commit a crew assignment via the write_assignment MCP tool.
+
+    The only call site of this function is ``assignment_service.approve`` —
+    never the Claude agent, which is never given this tool at all.
+    """
+    return run_tool(
+        ASSIGNMENT_SERVER,
+        "write_assignment",
+        {
+            "work_order_id": work_order_id,
+            "crew": crew,
+            "urgency": urgency,
+            "is_safety_critical": is_safety_critical,
+            "approved_by": approved_by,
+        },
+    )
