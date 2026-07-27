@@ -89,6 +89,17 @@ streamlit run frontend/app.py
 Open the Streamlit URL. Press **Generate next batch of orders** in the sidebar to
 load work orders, then review each card and Approve / Change crew / Reject.
 
+### Optional: standalone HTTP backend
+
+`frontend/app.py` calls the backend in-process via `backend/local_client.py` (no
+HTTP hop needed). A standalone FastAPI backend (`backend/main.py`) is also
+available for split hosting (frontend and backend as separate services), exposing
+the same routes over HTTP:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
 ## Deploy
 
 See [DEPLOY.md](DEPLOY.md) — deploy to Streamlit Community Cloud, with optional
@@ -105,9 +116,12 @@ If a key or password was ever committed or shared, rotate it.
 ```
 backend/
   database/   database.py · models.py · sample_orders.py (50-order pool)
-  services/   triage_service · claude_service · safety_rules · assignment_service · mcp_client
+  services/   triage_service · agent · prompts · safety_rules · assignment_service
+              · mcp_client · health_service
   schemas/    schemas.py
+  api/        workorders.py · assignments.py   (FastAPI routers)
   local_client.py   (in-process backend used by the Streamlit app)
+  main.py           (standalone FastAPI app, for split hosting)
 frontend/     app.py
 mcp_servers/  queue_server.py · assignment_server.py
 ```

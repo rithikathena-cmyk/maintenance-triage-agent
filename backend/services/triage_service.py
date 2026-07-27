@@ -3,20 +3,24 @@
 Flow (matches the architecture diagram):
 
     Work Orders DB
-        -> read_queue (MCP tool)
+        -> read_queue (MCP tool, called by the agent itself)
         -> Claude agent proposes urgency + crew
         -> deterministic safety guard escalates injury-risk orders
         -> Proposal written (NOT an assignment)
 
-Crucially, the agent is only ever given the *read* MCP tool here. Nothing in
-this path can write an assignment.
+``run_triage`` prefers ``agent.agentic_triage`` — a real Claude tool-use loop
+that calls read_queue itself — falling back to the per-order
+``agent.propose_triage`` path when there's no API key, on a rescan (mixed
+pending+triaged queue), or if the agentic loop errors out. Crucially, the
+agent is only ever given the *read* MCP tool. Nothing in this path can write
+an assignment.
 """
 import threading
 
 from sqlalchemy.orm import Session
 
 from backend.database import models
-from backend.services import claude_service
+from backend.services import agent
 from backend.services.mcp_client import QUEUE_SERVER, run_tool
 from backend.services.safety_rules import apply_safety_override
 
@@ -65,7 +69,7 @@ def triage_work_order(db: Session, work_order: models.WorkOrder) -> bool:
     hiccup never blocks an order from being filed. Returns True if triaged.
     """
     try:
-        proposal_data = claude_service.propose_triage(
+        proposal_data = agent.propose_triage(
             title=work_order.title,
             description=work_order.description,
             location=work_order.location,
@@ -78,6 +82,26 @@ def triage_work_order(db: Session, work_order: models.WorkOrder) -> bool:
         return False
 
 
+def _apply_agentic_proposals(db: Session, proposals: list[dict]) -> int:
+    """Persist proposals Claude submitted via the agentic tool-use loop.
+
+    Skips any work order the agent named that isn't actually still pending
+    (e.g. a stale id) rather than failing the whole batch.
+    """
+    triaged = 0
+    for proposal_data in proposals:
+        work_order = db.get(models.WorkOrder, proposal_data.get("work_order_id"))
+        if work_order is None or work_order.status != models.STATUS_PENDING:
+            continue
+        try:
+            _upsert_proposal(db, work_order, proposal_data)
+            db.commit()
+            triaged += 1
+        except Exception:
+            db.rollback()
+    return triaged
+
+
 def run_triage(db: Session, rescan: bool = False, limit: int | None = None) -> dict:
     """Triage pending work orders. Returns a summary dict.
 
@@ -87,12 +111,27 @@ def run_triage(db: Session, rescan: bool = False, limit: int | None = None) -> d
 
     ``limit`` caps how many orders this call processes — the frontend calls in
     small chunks so it can show a live progress bar. ``rescan`` also re-runs
-    already-triaged orders (never assigned/rejected ones). A module lock ensures
-    only one run touches the queue at a time; a second caller returns busy.
+    already-triaged orders (never assigned/rejected ones) — that mixed queue
+    doesn't fit the agentic loop's "read pending, triage it" contract, so a
+    rescan always uses the per-order classic path. A module lock ensures only
+    one run touches the queue at a time; a second caller returns busy.
     """
     if not _triage_lock.acquire(blocking=False):
         return {"triaged": 0, "queue_size": 0, "remaining": _pending_count(db), "busy": True}
     try:
+        if not rescan:
+            proposals = agent.agentic_triage(limit=limit or 8)
+            if proposals is not None:
+                triaged = _apply_agentic_proposals(db, proposals)
+                return {
+                    "triaged": triaged,
+                    "queue_size": len(proposals),
+                    "remaining": _pending_count(db),
+                    "busy": False,
+                }
+
+        # Classic per-order fallback: no API key, agentic loop errored, or a
+        # rescan (which re-triages already-triaged orders too).
         queue = _read_queue(models.STATUS_PENDING)
         if rescan:
             queue = queue + _read_queue(models.STATUS_TRIAGED)
@@ -105,7 +144,7 @@ def run_triage(db: Session, rescan: bool = False, limit: int | None = None) -> d
             if work_order is None:
                 continue
             try:
-                proposal_data = claude_service.propose_triage(
+                proposal_data = agent.propose_triage(
                     title=work_order.title,
                     description=work_order.description,
                     location=work_order.location,

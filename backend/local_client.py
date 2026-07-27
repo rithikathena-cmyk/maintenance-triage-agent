@@ -9,24 +9,17 @@ network. ``get`` / ``post`` dispatch by path to mirror the old REST surface.
 Requires DATABASE_URL / ANTHROPIC_API_KEY in the environment (the frontend
 bridges Streamlit secrets into os.environ before importing this module).
 """
-import os
 import re
 
-from sqlalchemy import text
-
 from backend.database import models
-from backend.database.database import (
-    SessionLocal,
-    engine,
-    init_db,
-)
-from backend.schemas.schemas import AssignmentOut, ProposalOut, WorkOrderOut
-from backend.services import assignment_service, triage_service
-from backend.services.mcp_client import ASSIGNMENT_SERVER, QUEUE_SERVER, ping_server
+from backend.database.database import SessionLocal, init_db
+from backend.schemas.schemas import AssignmentOut, WorkOrderOut, proposal_out
+from backend.services import assignment_service, health_service, triage_service
 from backend.services.safety_rules import (
     CREWS,
     SAFETY_KEYWORDS,
     URGENCY_LEVELS,
+    urgency_rank,
 )
 
 _initialized = False
@@ -40,75 +33,6 @@ def ensure_init():
         return
     init_db()
     _initialized = True
-
-
-# --------------------------------------------------------------------------- #
-# Serializers
-# --------------------------------------------------------------------------- #
-def _proposal_dict(p: models.Proposal) -> dict:
-    wo = p.work_order
-    kws = [k.strip() for k in (p.safety_keywords or "").split(",") if k.strip()]
-    return ProposalOut(
-        work_order_id=wo.id,
-        title=wo.title,
-        description=wo.description,
-        location=wo.location,
-        reported_by=wo.reported_by,
-        status=wo.status,
-        proposed_urgency=p.proposed_urgency,
-        proposed_crew=p.proposed_crew,
-        is_safety_critical=p.is_safety_critical,
-        safety_keywords=kws,
-        reasoning=p.reasoning,
-        confidence=p.confidence,
-        source=p.source,
-        created_at=wo.created_at,
-    ).model_dump(mode="json")
-
-
-# --------------------------------------------------------------------------- #
-# Health
-# --------------------------------------------------------------------------- #
-def _check_database() -> dict:
-    try:
-        with engine.connect() as c:
-            c.execute(text("SELECT 1"))
-        return {"status": "up", "detail": "connected"}
-    except Exception as exc:
-        return {"status": "down", "detail": exc.__class__.__name__}
-
-
-def _check_mcp(server: str, tool: str) -> dict:
-    try:
-        tools = ping_server(server)
-    except Exception as exc:
-        return {"status": "down", "detail": exc.__class__.__name__}
-    if tool not in tools:
-        return {"status": "degraded", "detail": f"missing {tool}"}
-    return {"status": "up", "detail": f"{len(tools)} tool(s): {', '.join(tools)}"}
-
-
-def _check_claude() -> dict:
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        return {"status": "fallback", "detail": "no API key — keyword heuristic"}
-    try:
-        import anthropic  # noqa: F401
-    except ImportError:
-        return {"status": "fallback", "detail": "anthropic SDK not installed"}
-    return {"status": "configured", "detail": os.getenv("CLAUDE_MODEL", "claude-opus-4-8")}
-
-
-def _health_full() -> dict:
-    comps = {
-        "backend": {"status": "up", "detail": "in-process"},
-        "database": _check_database(),
-        "queue_mcp": _check_mcp(QUEUE_SERVER, "read_queue"),
-        "assignment_mcp": _check_mcp(ASSIGNMENT_SERVER, "write_assignment"),
-        "claude": _check_claude(),
-    }
-    healthy = {"up", "configured"}
-    overall = "ok" if all(c["status"] in healthy for c in comps.values()) else "degraded"
-    return {"status": overall, "components": comps}
 
 
 # --------------------------------------------------------------------------- #
@@ -150,10 +74,16 @@ def _proposals() -> list:
             .filter(models.WorkOrder.status == "triaged")
             .all()
         )
-        # Chronological (as-generated) order — safety-critical orders are no
-        # longer pinned to the top; they appear mixed in with the rest.
-        rows.sort(key=lambda p: (p.work_order.created_at, p.work_order.id))
-        return [_proposal_dict(p) for p in rows]
+        # Safety-critical first, then by urgency, then oldest first — safety
+        # keyword hits must always surface at the top of the queue.
+        rows.sort(
+            key=lambda p: (
+                0 if p.is_safety_critical else 1,
+                urgency_rank(p.proposed_urgency),
+                p.work_order.created_at,
+            )
+        )
+        return [proposal_out(p).model_dump(mode="json") for p in rows]
     finally:
         db.close()
 
@@ -280,7 +210,7 @@ def _approve(work_order_id, approved_by, crew=None) -> dict:
 def _change_crew(work_order_id, crew) -> dict:
     db = SessionLocal()
     try:
-        return _proposal_dict(assignment_service.change_crew(db, work_order_id, crew))
+        return proposal_out(assignment_service.change_crew(db, work_order_id, crew)).model_dump(mode="json")
     finally:
         db.close()
 
@@ -305,7 +235,7 @@ def get(path, **params):
     if path == "/health":
         return {"status": "ok"}
     if path == "/health/full":
-        return _health_full()
+        return health_service.full_health("in-process")
     if path == "/meta":
         return {"crews": CREWS, "urgency_levels": URGENCY_LEVELS, "safety_keywords": SAFETY_KEYWORDS}
     if path == "/stats":

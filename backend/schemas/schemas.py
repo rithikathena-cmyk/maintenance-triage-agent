@@ -1,7 +1,11 @@
 """Pydantic request/response models for the API."""
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    from backend.database.models import Proposal
 
 
 class WorkOrderCreate(BaseModel):
@@ -43,6 +47,28 @@ class ProposalOut(BaseModel):
     confidence: float | None
     source: str
     created_at: datetime
+
+
+def proposal_out(p: "Proposal") -> ProposalOut:
+    """Build a ``ProposalOut`` from an ORM ``Proposal`` (joined with its work order)."""
+    wo = p.work_order
+    keywords = [k.strip() for k in (p.safety_keywords or "").split(",") if k.strip()]
+    return ProposalOut(
+        work_order_id=wo.id,
+        title=wo.title,
+        description=wo.description,
+        location=wo.location,
+        reported_by=wo.reported_by,
+        status=wo.status,
+        proposed_urgency=p.proposed_urgency,
+        proposed_crew=p.proposed_crew,
+        is_safety_critical=p.is_safety_critical,
+        safety_keywords=keywords,
+        reasoning=p.reasoning,
+        confidence=p.confidence,
+        source=p.source,
+        created_at=wo.created_at,
+    )
 
 
 class TriageSummary(BaseModel):
