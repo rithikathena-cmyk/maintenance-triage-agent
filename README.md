@@ -75,7 +75,7 @@ leave it unset to use local SQLite. See [DEPLOY.md](DEPLOY.md).
    # Leave DATABASE_URL unset to use local SQLite, or point at hosted MySQL:
    # DATABASE_URL=mysql://user:pass@host:port/dbname?ssl-mode=REQUIRED
    ANTHROPIC_API_KEY=sk-ant-...     # optional; without it, triage uses a keyword heuristic
-   CLAUDE_MODEL=claude-opus-4-8
+   CLAUDE_MODEL=claude-sonnet-5
    ```
    Without `ANTHROPIC_API_KEY` the app still runs end-to-end using a transparent
    keyword heuristic for triage.

@@ -41,7 +41,7 @@ def check_claude() -> dict:
         import anthropic  # noqa: F401
     except ImportError:
         return {"status": "fallback", "detail": "anthropic SDK not installed"}
-    return {"status": "configured", "detail": os.getenv("CLAUDE_MODEL", "claude-opus-4-8")}
+    return {"status": "configured", "detail": os.getenv("CLAUDE_MODEL", "claude-sonnet-5")}
 
 
 def full_health(backend_detail: str) -> dict:

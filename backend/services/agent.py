@@ -14,7 +14,7 @@ import os
 from backend.services import mcp_client
 from backend.services.prompts import AGENT_SYSTEM, AGENT_TOOLS, OUTPUT_SCHEMA, SYSTEM_PROMPT
 
-MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
+MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
 MAX_AGENT_TURNS = 16  # hard stop so a misbehaving tool-use loop can never run away
 
 

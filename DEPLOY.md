@@ -60,7 +60,7 @@ secrets or local data ship.
    # Omit DATABASE_URL entirely to use local SQLite (ephemeral).
    DATABASE_URL = "mysql://avnadmin:<password>@<host>:<port>/defaultdb?ssl-mode=REQUIRED"
    ANTHROPIC_API_KEY = "sk-ant-...your-key..."
-   CLAUDE_MODEL = "claude-opus-4-8"
+   CLAUDE_MODEL = "claude-sonnet-5"
    ```
 4. **Deploy.** First boot installs `requirements.txt` and creates the tables.
 

@@ -509,7 +509,7 @@ st.markdown(
         </div>
         <div class="metaline">
           <span class="envbadge">● {ENV_LABEL}</span>
-          <span>Model <b>{os.getenv("CLAUDE_MODEL", "claude-opus-4-8")}</b></span>
+          <span>Model <b>{os.getenv("CLAUDE_MODEL", "claude-sonnet-5")}</b></span>
           <span>Synced <b>{datetime.now().strftime("%H:%M:%S")}</b></span>
         </div>
       </div>
